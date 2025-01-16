@@ -6,6 +6,7 @@ import com.makkenzo.codehorizon.dtos.RefreshTokenRequestDTO
 import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -15,20 +16,27 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Auth")
 class AuthController(
     private val userService: UserService,
     private val jwtUtils: JwtUtils
 ) {
     @PostMapping("/register")
-    fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<AuthResponseDTO> {
-        val user = userService.registerUser(request.username, request.email, request.password)
+    fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<Any> {
+        return try {
+            val user =
+                userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
 
-        val accessToken = jwtUtils.generateAccessToken(user.email)
-        val refreshToken = jwtUtils.generateRefreshToken(user.email)
 
-        userService.updateRefreshToken(user.email, refreshToken)
+            val accessToken = jwtUtils.generateAccessToken(user.email)
+            val refreshToken = jwtUtils.generateRefreshToken(user.email)
 
-        return ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
+            userService.updateRefreshToken(user.email, refreshToken)
+
+            ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
+        }
     }
 
     @PostMapping("/login")
