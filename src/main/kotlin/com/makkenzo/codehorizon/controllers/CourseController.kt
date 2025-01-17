@@ -16,8 +16,33 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/courses")
-@Tag(name = "Course")
+@Tag(name = "Course", description = "Курсы")
 class CourseController(private val courseService: CourseService, private val jwtUtils: JwtUtils) {
+    @GetMapping
+    @Operation(summary = "Получить все курсы", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getAllCourses(): ResponseEntity<List<Course>> {
+        val courses = courseService.getCourses()
+        return ResponseEntity.ok(courses)
+    }
+
+    @GetMapping("/{courseId}")
+    @Operation(summary = "Получить курс по ID", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getCourseById(@PathVariable courseId: String): ResponseEntity<Course> {
+        return try {
+            val course = courseService.getCourseById(courseId)
+            ResponseEntity.ok(course)
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
+        }
+    }
+
+    @GetMapping("/author/{authorId}")
+    @Operation(summary = "Получить курсы по автору", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getCoursesByAuthor(@PathVariable authorId: String): ResponseEntity<List<Course>> {
+        val courses = courseService.getCoursesByAuthor(authorId)
+        return ResponseEntity.ok(courses)
+    }
+
     @PostMapping
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
     fun createCourse(
@@ -60,17 +85,26 @@ class CourseController(private val courseService: CourseService, private val jwt
         }
     }
 
-    @GetMapping
-    @Operation(summary = "Получить все курсы", security = [SecurityRequirement(name = "bearerAuth")])
-    fun getAllCourses(): ResponseEntity<List<Course>> {
-        val courses = courseService.getCourses()
-        return ResponseEntity.ok(courses)
-    }
-
-    @GetMapping("/author/{authorId}")
-    @Operation(summary = "Получить курсы по автору", security = [SecurityRequirement(name = "bearerAuth")])
-    fun getCoursesByAuthor(@PathVariable authorId: String): ResponseEntity<List<Course>> {
-        val courses = courseService.getCoursesByAuthor(authorId)
-        return ResponseEntity.ok(courses)
+    @PutMapping("/{courseId}")
+    @Operation(summary = "Обновить курс", security = [SecurityRequirement(name = "bearerAuth")])
+    fun updateCourse(
+        @PathVariable courseId: String,
+        @RequestBody requestBody: CreateCourseRequestDTO,
+        request: HttpServletRequest
+    ): ResponseEntity<Any> {
+        return try {
+            val token =
+                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
+            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val updatedCourse =
+                courseService.updateCourse(courseId, requestBody.title, requestBody.description, authorId)
+            ResponseEntity.ok(updatedCourse)
+        } catch (e: AccessDeniedException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to "Course not found"))
+        }
     }
 }

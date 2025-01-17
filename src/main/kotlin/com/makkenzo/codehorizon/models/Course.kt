@@ -6,8 +6,8 @@ import org.springframework.data.mongodb.core.mapping.Document
 @Document(collection = "courses")
 data class Course(
     @Id val id: String? = null,
-    val title: String,
-    val description: String,
+    var title: String,
+    var description: String,
     val authorId: String,
     val lessons: List<Lesson> = emptyList()
 )

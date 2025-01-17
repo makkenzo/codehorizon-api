@@ -34,9 +34,21 @@ class CourseService(
         return courseRepository.findByAuthorId(authorId)
     }
 
+    fun getCourseById(courseId: String): Course {
+        return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
+    }
+
     fun getCourses(): List<Course> {
         return courseRepository.findAll()
     }
 
-    
+    fun updateCourse(courseId: String, title: String, description: String, authorId: String): Course {
+        val course = getCourseById(courseId)
+        if (course.authorId != authorId) {
+            throw AccessDeniedException("Only the author can update the course")
+        }
+        course.title = title
+        course.description = description
+        return courseRepository.save(course)
+    }
 }
