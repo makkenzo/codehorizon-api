@@ -30,7 +30,6 @@ class AuthController(
             val user =
                 userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
 
-
             val accessToken = jwtUtils.generateAccessToken(user)
             val refreshToken = jwtUtils.generateRefreshToken(user)
 
@@ -49,8 +48,6 @@ class AuthController(
             val accessToken = jwtUtils.generateAccessToken(user)
             val refreshToken = jwtUtils.generateRefreshToken(user)
 
-            logger.info("Access token: $accessToken")
-            logger.info("Refresh token: $refreshToken")
             userService.updateRefreshToken(user.email, refreshToken)
             ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
         } else {

@@ -23,10 +23,7 @@ class JwtUtils {
             .setExpiration(Date(System.currentTimeMillis() + accessTokenExpirationMs)).signWith(secretKey).compact()
     }
 
-
     fun generateRefreshToken(user: User): String {
-        val encodedKey = Base64.getEncoder().encodeToString(secretKey.encoded)
-        logger.info("Secret key: ${encodedKey}")
         return Jwts.builder()
             .setSubject(user.email)
             .claim("id", user.id)

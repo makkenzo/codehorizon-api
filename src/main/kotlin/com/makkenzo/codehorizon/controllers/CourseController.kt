@@ -40,6 +40,7 @@ class CourseController(private val courseService: CourseService, private val jwt
     }
 
     @PostMapping("/{courseId}/lessons")
+    @Operation(summary = "Добавить лекцию в курс", security = [SecurityRequirement(name = "bearerAuth")])
     fun addLesson(
         @PathVariable courseId: String,
         @RequestBody lesson: Lesson,
@@ -48,7 +49,8 @@ class CourseController(private val courseService: CourseService, private val jwt
         return try {
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getEmailFromToken(token) // Получаем ID пользователя из токена
+            val authorId =
+                jwtUtils.getAuthorIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
             val updatedCourse = courseService.addLesson(courseId, lesson, authorId)
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {
@@ -58,7 +60,15 @@ class CourseController(private val courseService: CourseService, private val jwt
         }
     }
 
+    @GetMapping
+    @Operation(summary = "Получить все курсы", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getAllCourses(): ResponseEntity<List<Course>> {
+        val courses = courseService.getCourses()
+        return ResponseEntity.ok(courses)
+    }
+
     @GetMapping("/author/{authorId}")
+    @Operation(summary = "Получить курсы по автору", security = [SecurityRequirement(name = "bearerAuth")])
     fun getCoursesByAuthor(@PathVariable authorId: String): ResponseEntity<List<Course>> {
         val courses = courseService.getCoursesByAuthor(authorId)
         return ResponseEntity.ok(courses)
