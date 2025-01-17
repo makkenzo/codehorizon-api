@@ -8,5 +8,6 @@ data class Course(
     @Id val id: String? = null,
     val title: String,
     val description: String,
+    val authorId: String,
     val lessons: List<Lesson> = emptyList()
 )

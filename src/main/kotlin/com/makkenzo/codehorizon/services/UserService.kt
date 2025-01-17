@@ -10,8 +10,7 @@ import java.util.regex.Pattern
 class UserService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
-
-    ) {
+) {
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
             throw IllegalArgumentException("Email already exists")
@@ -59,5 +58,9 @@ class UserService(
 
     fun findByRefreshToken(refreshToken: String): User? {
         return userRepository.findByRefreshToken(refreshToken)
+    }
+
+    fun findById(id: String): User? {
+        return userRepository.findById(id).orElse(null)
     }
 }

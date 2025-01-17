@@ -7,6 +7,7 @@ import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -21,6 +22,8 @@ class AuthController(
     private val userService: UserService,
     private val jwtUtils: JwtUtils
 ) {
+    private val logger = LoggerFactory.getLogger(AuthController::class.java)
+
     @PostMapping("/register")
     fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<Any> {
         return try {
@@ -28,8 +31,8 @@ class AuthController(
                 userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
 
 
-            val accessToken = jwtUtils.generateAccessToken(user.email)
-            val refreshToken = jwtUtils.generateRefreshToken(user.email)
+            val accessToken = jwtUtils.generateAccessToken(user)
+            val refreshToken = jwtUtils.generateRefreshToken(user)
 
             userService.updateRefreshToken(user.email, refreshToken)
 
@@ -43,8 +46,11 @@ class AuthController(
     fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<AuthResponseDTO> {
         val user = userService.authenticateUser(request.email, request.password)
         return if (user != null) {
-            val accessToken = jwtUtils.generateAccessToken(user.email)
-            val refreshToken = jwtUtils.generateRefreshToken(user.email)
+            val accessToken = jwtUtils.generateAccessToken(user)
+            val refreshToken = jwtUtils.generateRefreshToken(user)
+
+            logger.info("Access token: $accessToken")
+            logger.info("Refresh token: $refreshToken")
             userService.updateRefreshToken(user.email, refreshToken)
             ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
         } else {
@@ -59,8 +65,8 @@ class AuthController(
             val email = jwtUtils.getEmailFromToken(refreshToken)
             val user = userService.findByRefreshToken(refreshToken)
             if (user != null && user.email == email) {
-                val newAccessToken = jwtUtils.generateAccessToken(email)
-                val newRefreshToken = jwtUtils.generateRefreshToken(email)
+                val newAccessToken = jwtUtils.generateAccessToken(user)
+                val newRefreshToken = jwtUtils.generateRefreshToken(user)
                 userService.updateRefreshToken(email, newRefreshToken)
                 return ResponseEntity.ok(AuthResponseDTO(newAccessToken, newRefreshToken))
             }
