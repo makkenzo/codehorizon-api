@@ -1,0 +1,12 @@
+version: '3.9'
+
+services:
+  codehorizon:
+    container_name: codehorizon
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/codehorizon

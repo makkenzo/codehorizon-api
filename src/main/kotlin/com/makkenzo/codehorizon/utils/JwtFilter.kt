@@ -14,7 +14,6 @@ class JwtFilter(private val jwtUtils: JwtUtils) : OncePerRequestFilter() {
         response: HttpServletResponse,
         filterChain: FilterChain
     ) {
-        // Игнорируем запросы к Swagger UI, OpenAPI и эндпоинтам аутентификации
         if (request.requestURI.startsWith("/v3/api-docs") ||
             request.requestURI.startsWith("/swagger-ui") ||
             request.requestURI.startsWith("/api/auth")
@@ -30,7 +29,6 @@ class JwtFilter(private val jwtUtils: JwtUtils) : OncePerRequestFilter() {
             val authentication = UsernamePasswordAuthenticationToken(email, null, emptyList())
             SecurityContextHolder.getContext().authentication = authentication
         } else {
-            // Если токен отсутствует или невалиден, выбрасываем AuthenticationException
             throw AuthenticationCredentialsNotFoundException("Invalid or missing token")
         }
         filterChain.doFilter(request, response)
