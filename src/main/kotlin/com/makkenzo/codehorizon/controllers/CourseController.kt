@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.controllers
 
+import com.makkenzo.codehorizon.annotations.JwtAuth
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
@@ -21,14 +22,14 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "Course", description = "Курсы")
 class CourseController(private val courseService: CourseService, private val jwtUtils: JwtUtils) {
     @GetMapping
-    @Operation(summary = "Получить все курсы", security = [SecurityRequirement(name = "bearerAuth")])
+    @Operation(summary = "Получить все курсы")
     fun getAllCourses(): ResponseEntity<List<Course>> {
         val courses = courseService.getCourses()
         return ResponseEntity.ok(courses)
     }
 
     @GetMapping("/{courseId}")
-    @Operation(summary = "Получить курс по ID", security = [SecurityRequirement(name = "bearerAuth")])
+    @Operation(summary = "Получить курс по ID")
     fun getCourseById(@PathVariable courseId: String): ResponseEntity<Course> {
         return try {
             val course = courseService.getCourseById(courseId)
@@ -39,14 +40,39 @@ class CourseController(private val courseService: CourseService, private val jwt
     }
 
     @GetMapping("/author/{authorId}")
-    @Operation(summary = "Получить курсы по автору", security = [SecurityRequirement(name = "bearerAuth")])
+    @Operation(summary = "Получить курсы по автору")
     fun getCoursesByAuthor(@PathVariable authorId: String): ResponseEntity<List<Course>> {
         val courses = courseService.getCoursesByAuthor(authorId)
         return ResponseEntity.ok(courses)
     }
 
+    @GetMapping("/{courseId}/lessons")
+    @Operation(summary = "Получить все лекции в курсе")
+    fun getLessonsByCourseId(@PathVariable courseId: String): ResponseEntity<List<Lesson>> {
+        return try {
+            val lessons = courseService.getLessonsByCourseId(courseId)
+            ResponseEntity.ok(lessons)
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
+        }
+    }
+
+    @GetMapping("/{courseId}/lessons/{lessonId}")
+    @Operation(summary = "Получить лекцию по ID")
+    fun getLessonById(@PathVariable courseId: String, @PathVariable lessonId: String): ResponseEntity<Lesson> {
+        return try {
+            val lesson = courseService.getLessonById(courseId, lessonId)
+            ResponseEntity.ok(lesson)
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
+        }
+    }
+
     @PostMapping
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
     fun createCourse(
         @RequestBody requestBody: CreateCourseRequestDTO,
         request: HttpServletRequest
@@ -68,6 +94,7 @@ class CourseController(private val courseService: CourseService, private val jwt
 
     @PostMapping("/{courseId}/lessons")
     @Operation(summary = "Добавить лекцию в курс", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
     fun addLesson(
         @PathVariable courseId: String,
         @RequestBody lesson: LessonRequestDTO,
@@ -89,6 +116,7 @@ class CourseController(private val courseService: CourseService, private val jwt
 
     @PutMapping("/{courseId}")
     @Operation(summary = "Обновить курс", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
     fun updateCourse(
         @PathVariable courseId: String,
         @RequestBody requestBody: CreateCourseRequestDTO,
@@ -112,6 +140,7 @@ class CourseController(private val courseService: CourseService, private val jwt
 
     @PutMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Обновить лекцию в курсе", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
     fun updateLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
@@ -136,6 +165,7 @@ class CourseController(private val courseService: CourseService, private val jwt
 
     @DeleteMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Удалить лекцию из курса", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
     fun deleteLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
@@ -153,30 +183,6 @@ class CourseController(private val courseService: CourseService, private val jwt
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to e.message))
-        }
-    }
-
-    @GetMapping("/{courseId}/lessons")
-    @Operation(summary = "Получить все лекции в курсе", security = [SecurityRequirement(name = "bearerAuth")])
-    fun getLessonsByCourseId(@PathVariable courseId: String): ResponseEntity<List<Lesson>> {
-        return try {
-            val lessons = courseService.getLessonsByCourseId(courseId)
-            ResponseEntity.ok(lessons)
-        } catch (e: NotFoundException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
-        }
-    }
-
-    @GetMapping("/{courseId}/lessons/{lessonId}")
-    @Operation(summary = "Получить лекцию по ID", security = [SecurityRequirement(name = "bearerAuth")])
-    fun getLessonById(@PathVariable courseId: String, @PathVariable lessonId: String): ResponseEntity<Lesson> {
-        return try {
-            val lesson = courseService.getLessonById(courseId, lessonId)
-            ResponseEntity.ok(lesson)
-        } catch (e: NotFoundException) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
         }
     }
 }
