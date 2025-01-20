@@ -1,8 +1,9 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
+import com.makkenzo.codehorizon.dtos.LessonRequestDTO
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
-import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -68,7 +69,7 @@ class CourseController(private val courseService: CourseService, private val jwt
     @Operation(summary = "Добавить лекцию в курс", security = [SecurityRequirement(name = "bearerAuth")])
     fun addLesson(
         @PathVariable courseId: String,
-        @RequestBody lesson: Lesson,
+        @RequestBody lesson: LessonRequestDTO,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
@@ -105,6 +106,52 @@ class CourseController(private val courseService: CourseService, private val jwt
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
         } catch (e: NoSuchElementException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to "Course not found"))
+        }
+    }
+
+    @PutMapping("/{courseId}/lessons/{lessonId}")
+    @Operation(summary = "Обновить лекцию в курсе", security = [SecurityRequirement(name = "bearerAuth")])
+    fun updateLesson(
+        @PathVariable courseId: String,
+        @PathVariable lessonId: String,
+        @RequestBody updatedLesson: LessonRequestDTO,
+        request: HttpServletRequest
+    ): ResponseEntity<Any> {
+        return try {
+            val token =
+                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
+            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val updatedCourse = courseService.updateLesson(courseId, lessonId, updatedLesson, authorId)
+
+            ResponseEntity.ok(updatedCourse)
+        } catch (e: AccessDeniedException) {
+            ResponseEntity.status((HttpStatus.FORBIDDEN)).body(mapOf("error" to e.message))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to e.message))
+        }
+    }
+
+    @DeleteMapping("/{courseId}/lessons/{lessonId}")
+    @Operation(summary = "Удалить лекцию из курса", security = [SecurityRequirement(name = "bearerAuth")])
+    fun deleteLesson(
+        @PathVariable courseId: String,
+        @PathVariable lessonId: String,
+        request: HttpServletRequest
+    ): ResponseEntity<Any> {
+        return try {
+            val token =
+                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
+            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val updatedCourse = courseService.deleteLesson(courseId, lessonId, authorId)
+            ResponseEntity.ok(updatedCourse)
+        } catch (e: AccessDeniedException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to e.message))
         }
     }
 }

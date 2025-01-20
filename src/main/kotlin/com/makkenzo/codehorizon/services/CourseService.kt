@@ -1,7 +1,8 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.LessonRequestDTO
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
-import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
@@ -20,13 +21,14 @@ class CourseService(
         return courseRepository.save(course)
     }
 
-    fun addLesson(courseId: String, lesson: Lesson, authorId: String): Course {
+    fun addLesson(courseId: String, lessonDto: LessonRequestDTO, authorId: String): Course {
         val author = userService.findById(authorId) ?: throw IllegalArgumentException("User not found")
         if (!author.roles.contains("ADMIN")) {
             throw AccessDeniedException("Only admins can add lessons")
         }
         val course = courseRepository.findById(courseId).orElseThrow { IllegalArgumentException("Course not found") }
-        val updatedCourse = course.copy(lessons = course.lessons + lesson)
+        val newLesson = lessonDto.toLesson()
+        val updatedCourse = course.copy(lessons = (course.lessons + newLesson).toMutableList())
         return courseRepository.save(updatedCourse)
     }
 
@@ -49,6 +51,33 @@ class CourseService(
         }
         course.title = title
         course.description = description
+        return courseRepository.save(course)
+    }
+
+    fun updateLesson(courseId: String, lessonId: String, updatedLesson: LessonRequestDTO, authorId: String): Course {
+        val course = getCourseById(courseId)
+        if (course.authorId != authorId) {
+            throw AccessDeniedException("Only the author can update the course")
+        }
+        val lesson =
+            course.lessons.find { it.id == lessonId } ?: throw NotFoundException("Lesson not found with id: $lessonId")
+
+        lesson.title = updatedLesson.title
+        lesson.content = updatedLesson.content
+        lesson.tasks = updatedLesson.tasks
+        lesson.codeExamples = updatedLesson.codeExamples
+
+        return courseRepository.save(course)
+    }
+
+    fun deleteLesson(courseId: String, lessonId: String, authorId: String): Course {
+        val course = getCourseById(courseId)
+        if (course.authorId != authorId) {
+            throw AccessDeniedException("Only the author can update the course")
+        }
+        val lesson =
+            course.lessons.find { it.id == lessonId } ?: throw NotFoundException("Lesson not found with id: $lessonId")
+        course.lessons.remove(lesson)
         return courseRepository.save(course)
     }
 }
