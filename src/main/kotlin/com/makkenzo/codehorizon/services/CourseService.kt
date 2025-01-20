@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
@@ -42,6 +43,17 @@ class CourseService(
 
     fun getCourses(): List<Course> {
         return courseRepository.findAll()
+    }
+
+    fun getLessonsByCourseId(courseId: String): List<Lesson> {
+        val course = getCourseById(courseId)
+        return course.lessons
+    }
+
+    fun getLessonById(courseId: String, lessonId: String): Lesson {
+        val course = getCourseById(courseId)
+        return course.lessons.find { it.id == lessonId }
+            ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
 
     fun updateCourse(courseId: String, title: String, description: String, authorId: String): Course {

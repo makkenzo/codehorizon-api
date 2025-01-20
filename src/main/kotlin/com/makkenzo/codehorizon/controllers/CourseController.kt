@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -152,6 +153,30 @@ class CourseController(private val courseService: CourseService, private val jwt
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to e.message))
+        }
+    }
+
+    @GetMapping("/{courseId}/lessons")
+    @Operation(summary = "Получить все лекции в курсе", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getLessonsByCourseId(@PathVariable courseId: String): ResponseEntity<List<Lesson>> {
+        return try {
+            val lessons = courseService.getLessonsByCourseId(courseId)
+            ResponseEntity.ok(lessons)
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(emptyList())
+        }
+    }
+
+    @GetMapping("/{courseId}/lessons/{lessonId}")
+    @Operation(summary = "Получить лекцию по ID", security = [SecurityRequirement(name = "bearerAuth")])
+    fun getLessonById(@PathVariable courseId: String, @PathVariable lessonId: String): ResponseEntity<Lesson> {
+        return try {
+            val lesson = courseService.getLessonById(courseId, lessonId)
+            ResponseEntity.ok(lesson)
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
         }
     }
 }
