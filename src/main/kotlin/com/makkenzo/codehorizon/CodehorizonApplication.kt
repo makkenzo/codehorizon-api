@@ -6,6 +6,7 @@ import org.springframework.boot.runApplication
 @SpringBootApplication
 class CodehorizonApplication
 
+
 fun main(args: Array<String>) {
-	runApplication<CodehorizonApplication>(*args)
+    runApplication<CodehorizonApplication>(*args)
 }

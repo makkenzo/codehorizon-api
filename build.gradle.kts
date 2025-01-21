@@ -32,6 +32,7 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-jackson:0.11.2")
     implementation("org.slf4j:slf4j-api")
     implementation("ch.qos.logback:logback-classic")
+    implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
