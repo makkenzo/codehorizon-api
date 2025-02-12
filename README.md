@@ -55,4 +55,4 @@ Make sure you have JDK 21 installed and your build tool of choice (Maven or Grad
 
 <h2>🛡️ License:</h2>
 
-This project is licensed under the MIT
+This project is licensed under the BSD 3-Clause
