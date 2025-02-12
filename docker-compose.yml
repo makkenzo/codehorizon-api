@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   codehorizon:
     container_name: codehorizon
