@@ -82,7 +82,8 @@ class CourseController(private val courseService: CourseService, private val jwt
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
             val authorId =
                 jwtUtils.getAuthorIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
-            val course = courseService.createCourse(requestBody.title, requestBody.description, authorId)
+            val course =
+                courseService.createCourse(requestBody.title, requestBody.description, requestBody.price, authorId)
             ResponseEntity.ok(course)
         } catch (e: AccessDeniedException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))
@@ -127,7 +128,13 @@ class CourseController(private val courseService: CourseService, private val jwt
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
             val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
             val updatedCourse =
-                courseService.updateCourse(courseId, requestBody.title, requestBody.description, authorId)
+                courseService.updateCourse(
+                    courseId,
+                    requestBody.title,
+                    requestBody.description,
+                    requestBody.price,
+                    authorId
+                )
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))

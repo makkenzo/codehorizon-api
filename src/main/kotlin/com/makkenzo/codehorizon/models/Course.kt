@@ -9,5 +9,9 @@ data class Course(
     var title: String,
     var description: String,
     val authorId: String,
-    var lessons: MutableList<Lesson> = mutableListOf()
+    var lessons: MutableList<Lesson> = mutableListOf(),
+    var rating: Double = 0.0,
+    var reviews: MutableList<Review> = mutableListOf(),
+    var price: Double = 0.0,
+    var discount: Double = 0.0,
 )

@@ -5,21 +5,28 @@ import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
+import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
 @Service
 class CourseService(
     private val courseRepository: CourseRepository,
-    private val userService: UserService
+    private val userService: UserService,
+    private val userRepository: UserRepository
 ) {
-    fun createCourse(title: String, description: String, authorId: String): Course {
+    fun createCourse(title: String, description: String, price: Double, authorId: String): Course {
         val author = userService.findById(authorId) ?: throw IllegalArgumentException("User not found")
         if (!author.roles.contains("ADMIN")) {
             throw AccessDeniedException("Only admins can create courses")
         }
-        val course = Course(title = title, description = description, authorId = authorId)
-        return courseRepository.save(course)
+        val course = Course(title = title, description = description, authorId = authorId, price = price)
+        val savedCourse = courseRepository.save(course)
+
+        author.created_courses.add(savedCourse.id!!)
+        userRepository.save(author)
+
+        return savedCourse
     }
 
     fun addLesson(courseId: String, lessonDto: LessonRequestDTO, authorId: String): Course {
@@ -56,13 +63,14 @@ class CourseService(
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
 
-    fun updateCourse(courseId: String, title: String, description: String, authorId: String): Course {
+    fun updateCourse(courseId: String, title: String, description: String, price: Double, authorId: String): Course {
         val course = getCourseById(courseId)
         if (course.authorId != authorId) {
             throw AccessDeniedException("Only the author can update the course")
         }
         course.title = title
         course.description = description
+        course.price = price
         return courseRepository.save(course)
     }
 

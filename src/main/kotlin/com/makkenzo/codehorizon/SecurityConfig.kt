@@ -24,7 +24,6 @@ class SecurityConfig() {
         http.csrf { it.disable() }
             .authorizeHttpRequests { requests ->
                 requests
-
                     .anyRequest().permitAll()
             }
             .exceptionHandling { exceptions ->
