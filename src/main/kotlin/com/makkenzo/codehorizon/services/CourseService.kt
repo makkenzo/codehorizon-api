@@ -15,12 +15,28 @@ class CourseService(
     private val userService: UserService,
     private val userRepository: UserRepository
 ) {
-    fun createCourse(title: String, description: String, price: Double, authorId: String): Course {
+    fun createCourse(
+        title: String,
+        description: String,
+        price: Double,
+        authorId: String,
+        imagePreview: String?,
+        videoPreview: String?
+    ): Course {
         val author = userService.findById(authorId) ?: throw IllegalArgumentException("User not found")
+
         if (!author.roles.contains("ADMIN")) {
             throw AccessDeniedException("Only admins can create courses")
         }
-        val course = Course(title = title, description = description, authorId = authorId, price = price)
+
+        val course = Course(
+            title = title,
+            description = description,
+            authorId = authorId,
+            price = price,
+            imagePreview = imagePreview,
+            videoPreview = videoPreview
+        )
         val savedCourse = courseRepository.save(course)
 
         author.created_courses.add(savedCourse.id!!)

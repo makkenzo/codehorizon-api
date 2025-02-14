@@ -8,6 +8,8 @@ data class Course(
     @Id val id: String? = null,
     var title: String,
     var description: String,
+    val imagePreview: String? = null,
+    val videoPreview: String? = null,
     val authorId: String,
     var lessons: MutableList<Lesson> = mutableListOf(),
     var rating: Double = 0.0,

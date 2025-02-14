@@ -31,6 +31,7 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-impl:0.11.2")
     implementation("io.jsonwebtoken:jjwt-jackson:0.11.2")
     implementation("org.slf4j:slf4j-api")
+    implementation("io.minio:minio:8.3.4")
     implementation("ch.qos.logback:logback-classic")
     implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
     implementation("org.springframework.boot:spring-boot-starter-actuator")

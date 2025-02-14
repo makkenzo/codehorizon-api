@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.JwtAuth
+import com.makkenzo.codehorizon.com.makkenzo.codehorizon.services.CloudflareService
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
@@ -16,11 +17,16 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.multipart.MultipartFile
 
 @RestController
 @RequestMapping("/api/courses")
 @Tag(name = "Course", description = "Курсы")
-class CourseController(private val courseService: CourseService, private val jwtUtils: JwtUtils) {
+class CourseController(
+    private val courseService: CourseService,
+    private val jwtUtils: JwtUtils,
+    private val cloudflareService: CloudflareService
+) {
     @GetMapping
     @Operation(summary = "Получить все курсы")
     fun getAllCourses(): ResponseEntity<List<Course>> {
@@ -74,16 +80,24 @@ class CourseController(private val courseService: CourseService, private val jwt
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
     @JwtAuth
     fun createCourse(
-        @RequestBody requestBody: CreateCourseRequestDTO,
+        @RequestParam("title") title: String,
+        @RequestParam("description") description: String,
+        @RequestParam("price") price: Double,
+        @RequestPart("imagePreview", required = false) imageFile: MultipartFile?,
+        @RequestPart("videoPreview", required = false) videoFile: MultipartFile?,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
             val authorId =
-                jwtUtils.getAuthorIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
-            val course =
-                courseService.createCourse(requestBody.title, requestBody.description, requestBody.price, authorId)
+                jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+
+            val imageUrl = imageFile?.let { cloudflareService.uploadFileToR2(it, "course_images") }
+            val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
+
+
+            val course = courseService.createCourse(title, description, price, authorId, imageUrl, videoUrl)
             ResponseEntity.ok(course)
         } catch (e: AccessDeniedException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))
