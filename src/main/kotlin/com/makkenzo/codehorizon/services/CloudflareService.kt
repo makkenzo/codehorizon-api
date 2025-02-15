@@ -19,12 +19,12 @@ class CloudflareService(private val minioClient: MinioClient) {
         minioClient.putObject(
             PutObjectArgs.builder()
                 .bucket(bucketName)
-                .`object`(fileName)
+                .`object`(filePath)
                 .stream(file.inputStream, file.size, -1)
                 .contentType(file.contentType)
                 .build()
         )
 
-        return "https://codehorizon-bucket.makkenzo.com/$bucketName/$filePath"
+        return "https://codehorizon-bucket.makkenzo.com/$filePath"
     }
 }
