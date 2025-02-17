@@ -10,10 +10,13 @@ import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.*
@@ -76,14 +79,22 @@ class CourseController(
         }
     }
 
-    @PostMapping
+    @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
     @JwtAuth
     fun createCourse(
         @RequestParam("title") title: String,
         @RequestParam("description") description: String,
         @RequestParam("price") price: Double,
+        @Parameter(
+            description = "Файл превью для изображения",
+            schema = Schema(type = "string", format = "binary")
+        )
         @RequestPart("imagePreview", required = false) imageFile: MultipartFile?,
+        @Parameter(
+            description = "Файл превью для видео",
+            schema = Schema(type = "string", format = "binary")
+        )
         @RequestPart("videoPreview", required = false) videoFile: MultipartFile?,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
