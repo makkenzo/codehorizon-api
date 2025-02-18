@@ -71,8 +71,8 @@ class VerificationController(
                     response.addCookie(accessTokenCookie)
                     response.addCookie(refreshTokenCookie)
 
-                    val redirectUrl = "$frontDomainUrl/verify?status=success"
-                    return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, redirectUrl).build()
+
+                    return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, frontDomainUrl).build()
                 } else {
                     ResponseEntity.internalServerError()
                         .body("Ошибка активации аккаунта для пользователя с email $email")
