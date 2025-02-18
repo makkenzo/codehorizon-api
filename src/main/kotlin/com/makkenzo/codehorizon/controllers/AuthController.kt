@@ -31,14 +31,9 @@ class AuthController(
             val user =
                 userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
 
-            val accessToken = jwtUtils.generateAccessToken(user)
-            val refreshToken = jwtUtils.generateRefreshToken(user)
-
-            userService.updateRefreshToken(user.email, refreshToken)
-
             emailService.sendVerificationEmail(user, "registration")
 
-            ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
+            ResponseEntity.ok("Пользователь успешно зарегистрирован. Пожалуйста, подтвердите ваш email.")
         } catch (e: IllegalArgumentException) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
         }
