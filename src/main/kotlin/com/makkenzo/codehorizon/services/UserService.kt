@@ -56,8 +56,8 @@ class UserService(
         }
     }
 
-    fun authenticateUser(email: String, password: String): User? {
-        val user = userRepository.findByEmail(email)
+    fun authenticateUser(login: String, password: String): User? {
+        val user = userRepository.findByUsernameOrEmail(login, login)
         return if (user != null && passwordEncoder.matches(password, user.passwordHash)) user else null
     }
 

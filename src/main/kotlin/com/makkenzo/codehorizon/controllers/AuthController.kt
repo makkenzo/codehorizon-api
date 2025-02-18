@@ -47,7 +47,7 @@ class AuthController(
     @PostMapping("/login")
     @Operation(summary = "Аутентификация пользователя")
     fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<AuthResponseDTO> {
-        val user = userService.authenticateUser(request.email, request.password)
+        val user = userService.authenticateUser(request.login, request.password)
         return if (user != null) {
             val accessToken = jwtUtils.generateAccessToken(user)
             val refreshToken = jwtUtils.generateRefreshToken(user)
