@@ -34,6 +34,18 @@ class UserService(
         return userRepository.save(user)
     }
 
+    fun activateAccount(email: String): Boolean {
+        val user = userRepository.findByEmail(email) ?: return false
+
+        if (user.isVerified) {
+            return true
+        }
+
+        user.isVerified = true
+        userRepository.save(user)
+        return true
+    }
+
     private fun validatePassword(password: String) {
         if (password.length < 8) {
             throw IllegalArgumentException("Password must be at least 8 characters long")

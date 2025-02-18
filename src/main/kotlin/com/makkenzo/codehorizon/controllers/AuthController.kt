@@ -1,13 +1,14 @@
 package com.makkenzo.codehorizon.controllers
 
+import com.makkenzo.codehorizon.com.makkenzo.codehorizon.services.EmailService
 import com.makkenzo.codehorizon.dtos.AuthResponseDTO
 import com.makkenzo.codehorizon.dtos.LoginRequestDTO
 import com.makkenzo.codehorizon.dtos.RefreshTokenRequestDTO
 import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
+import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -20,11 +21,11 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Auth")
 class AuthController(
     private val userService: UserService,
-    private val jwtUtils: JwtUtils
+    private val jwtUtils: JwtUtils,
+    private val emailService: EmailService
 ) {
-    private val logger = LoggerFactory.getLogger(AuthController::class.java)
-
     @PostMapping("/register")
+    @Operation(summary = "Регистрация пользователя")
     fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<Any> {
         return try {
             val user =
@@ -35,6 +36,8 @@ class AuthController(
 
             userService.updateRefreshToken(user.email, refreshToken)
 
+            emailService.sendVerificationEmail(user, "registration")
+
             ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
@@ -42,6 +45,7 @@ class AuthController(
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Аутентификация пользователя")
     fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<AuthResponseDTO> {
         val user = userService.authenticateUser(request.email, request.password)
         return if (user != null) {
@@ -56,6 +60,7 @@ class AuthController(
     }
 
     @PostMapping("/refresh-token")
+    @Operation(summary = "Обновление токена")
     fun refreshToken(@RequestBody request: RefreshTokenRequestDTO): ResponseEntity<AuthResponseDTO> {
         val refreshToken = request.refreshToken
         if (jwtUtils.validateToken(refreshToken)) {

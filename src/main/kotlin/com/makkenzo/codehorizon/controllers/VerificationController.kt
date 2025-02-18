@@ -1,0 +1,53 @@
+package com.makkenzo.codehorizon.com.makkenzo.codehorizon.controllers
+
+import com.makkenzo.codehorizon.services.UserService
+import com.makkenzo.codehorizon.utils.JwtUtils
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+
+@RestController
+@RequestMapping("/api/verify")
+@Tag(name = "Verification")
+class VerificationController(
+    private val jwtUtils: JwtUtils,
+    private val userService: UserService
+) {
+    @GetMapping
+    @Operation(summary = "Подтверждение действия")
+    fun verify(
+        @RequestParam token: String,
+        @RequestParam action: String
+    ): ResponseEntity<String> {
+        if (!jwtUtils.validateToken(token)) {
+            return ResponseEntity.badRequest().body("Неверный или истекший токен")
+        }
+
+        val tokenAction = jwtUtils.getActionFromToken(token)
+        if (tokenAction != action) {
+            return ResponseEntity.badRequest().body("Некорректный тип действия")
+        }
+
+        val email = jwtUtils.getEmailFromToken(token)
+
+        return when (action) {
+            "registration" -> {
+                val activated = userService.activateAccount(email)
+                if (activated) {
+                    ResponseEntity.ok("Аккаунт пользователя с email $email успешно активирован")
+                } else {
+                    ResponseEntity.internalServerError()
+                        .body("Ошибка активации аккаунта для пользователя с email $email")
+                }
+            }
+
+            else -> {
+                ResponseEntity.badRequest().body("Неизвестный тип действия: $action")
+            }
+        }
+    }
+}

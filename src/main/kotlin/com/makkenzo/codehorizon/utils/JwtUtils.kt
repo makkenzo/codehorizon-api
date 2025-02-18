@@ -12,12 +12,16 @@ import javax.crypto.SecretKey
 @Component
 class JwtUtils {
     private val secretKey: SecretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256)
-    private val accessTokenExpirationMs = 900_000
-    private val refreshTokenExpirationMs = 604_800_000
+    private val accessTokenExpirationMs = 900_000 // 15 minutes
+    private val refreshTokenExpirationMs = 604_800_000 // 1 day
+    private val verificationTokenExpirationMs = 1_800_000 // 30 minutes
     private val logger = LoggerFactory.getLogger(JwtUtils::class.java)
 
     fun generateAccessToken(user: User): String {
-        return Jwts.builder().setSubject(user.email).claim("id", user.id).claim("username", user.username)
+        return Jwts.builder()
+            .setSubject(user.email)
+            .claim("id", user.id)
+            .claim("username", user.username)
             .claim("roles", user.roles)
             .setIssuedAt(Date())
             .setExpiration(Date(System.currentTimeMillis() + accessTokenExpirationMs)).signWith(secretKey).compact()
@@ -29,8 +33,19 @@ class JwtUtils {
             .claim("id", user.id)
             .claim("username", user.username)
             .claim("roles", user.roles)
-            .setIssuedAt(Date()) // Время создания токена
-            .setExpiration(Date(System.currentTimeMillis() + refreshTokenExpirationMs)) // Время истечения
+            .setIssuedAt(Date())
+            .setExpiration(Date(System.currentTimeMillis() + refreshTokenExpirationMs))
+            .signWith(secretKey)
+            .compact()
+    }
+
+    fun generateVerificationToken(user: User, action: String): String {
+        return Jwts.builder()
+            .setSubject(user.email)
+            .claim("id", user.id)
+            .claim("action", action)
+            .setIssuedAt(Date())
+            .setExpiration(Date(System.currentTimeMillis() + verificationTokenExpirationMs))
             .signWith(secretKey)
             .compact()
     }
@@ -53,5 +68,9 @@ class JwtUtils {
     fun getAuthorIdFromToken(token: String): String {
         return Jwts.parserBuilder().setSigningKey(secretKey).build()
             .parseClaimsJws(token).body.get("id") as String
+    }
+
+    fun getActionFromToken(token: String): String {
+        return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body["action"] as String
     }
 }
