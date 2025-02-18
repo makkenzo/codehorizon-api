@@ -3,7 +3,7 @@ name: Kotlin Spring Boot CI/CD
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   build:

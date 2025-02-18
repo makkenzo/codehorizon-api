@@ -18,7 +18,7 @@ class SwaggerConfig {
     @Bean
     fun customOpenAPI(): OpenAPI {
         return OpenAPI().info(
-            Info().title("CodeHorizon API").version("0.0.1")
+            Info().title("CodeHorizon API").version("1.0.0")
                 .description("API для платформы обучения веб-разработке CodeHorizon")
         )
     }
