@@ -50,7 +50,7 @@ class UserService(
         if (password.length < 8) {
             throw IllegalArgumentException("Password must be at least 8 characters long")
         }
-        val pattern = Pattern.compile("^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=])(?=\\S+$).{8,}$")
+        val pattern = Pattern.compile("^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}\$")
         if (!pattern.matcher(password).matches()) {
             throw IllegalArgumentException("Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
         }
