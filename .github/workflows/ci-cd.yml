@@ -19,6 +19,16 @@ jobs:
           java-version: 21
           distribution: temurin
 
+      - name: Create .env file
+        run: |
+          echo "DOMAIN_URL=${{ secrets.DOMAIN_URL }}" >> .env
+          echo "MONGO_URI=${{ secrets.MONGO_URI }}" >> .env
+          echo "R2_ACCESS_KEY=${{ secrets.R2_ACCESS_KEY }}" >> .env
+          echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}" >> .env
+          echo "R2_SECRET_KEY=${{ secrets.R2_SECRET_KEY }}" >> .env
+          echo "YANDEX_APP_PASSWORD=${{ secrets.YANDEX_APP_PASSWORD }}" >> .env
+          echo "YANDEX_USERNAME=${{ secrets.YANDEX_USERNAME }}" >> .env
+
       - name: Build with Gradle
         run: ./gradlew build
 
