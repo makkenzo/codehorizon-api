@@ -3,8 +3,11 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.UserRepository
+import com.makkenzo.codehorizon.utils.JwtUtils
+import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 import java.util.regex.Pattern
 
 @Service
@@ -12,6 +15,7 @@ class UserService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
     private val profileService: ProfileService,
+    private val jwtUtils: JwtUtils,
 ) {
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
@@ -42,6 +46,9 @@ class UserService(
 
         return savedUser
     }
+
+    fun getUserById(id: String): User = userRepository.findById(id)
+        .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
 
     fun activateAccount(email: String): Boolean {
         val user = userRepository.findByEmail(email) ?: return false

@@ -1,14 +1,18 @@
 package com.makkenzo.codehorizon.controllers
 
+import com.makkenzo.codehorizon.annotations.JwtAuth
 import com.makkenzo.codehorizon.com.makkenzo.codehorizon.services.EmailService
 import com.makkenzo.codehorizon.dtos.AuthResponseDTO
 import com.makkenzo.codehorizon.dtos.LoginRequestDTO
 import com.makkenzo.codehorizon.dtos.RefreshTokenRequestDTO
 import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
+import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -86,5 +90,16 @@ class AuthController(
         } else {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "Wrong token!"))
         }
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
+    @JwtAuth
+    fun getMe(request: HttpServletRequest): ResponseEntity<User> {
+        val token = request.getHeader("Authorization")
+            ?: throw IllegalArgumentException("Authorization header is missing")
+        val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
+        val user = userService.getUserById(userId)
+        return ResponseEntity.ok(user)
     }
 }
