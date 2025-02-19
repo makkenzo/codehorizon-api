@@ -1,4 +1,4 @@
-package com.makkenzo.codehorizon.config
+package com.makkenzo.codehorizon.configs
 
 import io.minio.MinioClient
 import org.springframework.context.annotation.Bean

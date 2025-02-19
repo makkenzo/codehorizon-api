@@ -1,4 +1,4 @@
-package com.makkenzo.codehorizon
+package com.makkenzo.codehorizon.configs
 
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -19,10 +19,6 @@ class RequestResponseLoggingFilter : OncePerRequestFilter() {
         response: HttpServletResponse,
         filterChain: FilterChain
     ) {
-        // Логирование входящего запроса
-
-
-        // Оборачиваем response для логирования его кода
         val wrappedResponse = ResponseWrapper(response, "UTF-8");
 
         try {

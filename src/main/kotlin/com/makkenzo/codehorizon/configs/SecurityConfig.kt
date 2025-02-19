@@ -1,4 +1,4 @@
-package com.makkenzo.codehorizon
+package com.makkenzo.codehorizon.configs
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
