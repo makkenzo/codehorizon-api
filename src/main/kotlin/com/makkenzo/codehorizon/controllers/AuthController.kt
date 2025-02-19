@@ -11,10 +11,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/auth")
@@ -70,5 +67,20 @@ class AuthController(
         }
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+    }
+
+    @GetMapping("/token")
+    @Operation(summary = "Извлекает токены из печеньки")
+    fun getAccessToken(
+        @CookieValue(
+            "access_token",
+            required = false
+        ) accessToken: String?
+    ): ResponseEntity<Map<String, String>> {
+        return if (accessToken != null && jwtUtils.validateToken(accessToken)) {
+            ResponseEntity.ok(mapOf("access_token" to accessToken))
+        } else {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "Wrong token!"))
+        }
     }
 }
