@@ -75,10 +75,14 @@ class AuthController(
         @CookieValue(
             "access_token",
             required = false
-        ) accessToken: String?
-    ): ResponseEntity<Map<String, String>> {
-        return if (accessToken != null && jwtUtils.validateToken(accessToken)) {
-            ResponseEntity.ok(mapOf("access_token" to accessToken))
+        ) accessToken: String?,
+        @CookieValue(
+            "refresh_token",
+            required = false
+        ) refreshToken: String?
+    ): ResponseEntity<Any> {
+        return if (accessToken != null && jwtUtils.validateToken(accessToken) && refreshToken != null) {
+            ResponseEntity.ok(mapOf("accessToken" to accessToken, "refreshToken" to refreshToken))
         } else {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "Wrong token!"))
         }
