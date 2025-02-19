@@ -12,13 +12,12 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/profiles")
+@RequestMapping("/api/profiles")
 @Tag(name = "Profile")
 class ProfileController(
     private val profileService: ProfileService,
     private val jwtUtils: JwtUtils
 ) {
-
     @GetMapping("/")
     @Operation(
         summary = "Получение профиля текущего пользователя",
