@@ -39,7 +39,7 @@ class CourseService(
         )
         val savedCourse = courseRepository.save(course)
 
-        author.created_courses.add(savedCourse.id!!)
+        author.createdCourseIds.add(savedCourse.id!!)
         userRepository.save(author)
 
         return savedCourse

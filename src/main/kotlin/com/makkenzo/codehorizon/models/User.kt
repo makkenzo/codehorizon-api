@@ -14,5 +14,11 @@ data class User(
     val refreshToken: String? = null,
     val roles: List<String> = listOf("USER"),
     val courses: MutableList<CourseProgress> = mutableListOf(),
-    val created_courses: MutableList<String> = mutableListOf()
+    val createdCourseIds: MutableList<String> = mutableListOf(),
+
+    val cartId: String? = null,
+    val wishlistId: String? = null,
+    val profileId: String? = null,
+
+    val accountSettings: AccountSettings? = null,
 )

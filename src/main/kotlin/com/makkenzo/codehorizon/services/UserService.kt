@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -10,6 +11,7 @@ import java.util.regex.Pattern
 class UserService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
+    private val profileService: ProfileService,
 ) {
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
@@ -31,7 +33,14 @@ class UserService(
             email = email,
             passwordHash = passwordEncoder.encode(password)
         )
-        return userRepository.save(user)
+        val savedUser = userRepository.save(user)
+
+        val profile = Profile(
+            userId = savedUser.id!!,
+        )
+        profileService.createProfile(profile)
+
+        return savedUser
     }
 
     fun activateAccount(email: String): Boolean {

@@ -65,7 +65,7 @@ class JwtUtils {
         return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body.subject
     }
 
-    fun getAuthorIdFromToken(token: String): String {
+    fun getIdFromToken(token: String): String {
         return Jwts.parserBuilder().setSigningKey(secretKey).build()
             .parseClaimsJws(token).body.get("id") as String
     }

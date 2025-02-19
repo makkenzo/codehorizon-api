@@ -102,7 +102,7 @@ class CourseController(
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
             val authorId =
-                jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+                jwtUtils.getIdFromToken(token.substring(7).trim())
 
             val imageUrl = imageFile?.let { cloudflareService.uploadFileToR2(it, "course_images") }
             val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
@@ -130,7 +130,7 @@ class CourseController(
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
             val authorId =
-                jwtUtils.getAuthorIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
+                jwtUtils.getIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
             val updatedCourse = courseService.addLesson(courseId, lesson, authorId)
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {
@@ -151,7 +151,7 @@ class CourseController(
         return try {
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
             val updatedCourse =
                 courseService.updateCourse(
                     courseId,
@@ -182,7 +182,7 @@ class CourseController(
         return try {
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
             val updatedCourse = courseService.updateLesson(courseId, lessonId, updatedLesson, authorId)
 
             ResponseEntity.ok(updatedCourse)
@@ -206,7 +206,7 @@ class CourseController(
         return try {
             val token =
                 request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getAuthorIdFromToken(token.substring(7).trim())
+            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
             val updatedCourse = courseService.deleteLesson(courseId, lessonId, authorId)
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {
