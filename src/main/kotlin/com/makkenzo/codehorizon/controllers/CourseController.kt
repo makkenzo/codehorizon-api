@@ -1,12 +1,12 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.JwtAuth
-import com.makkenzo.codehorizon.com.makkenzo.codehorizon.services.CloudflareService
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.Lesson
+import com.makkenzo.codehorizon.services.CloudflareService
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation

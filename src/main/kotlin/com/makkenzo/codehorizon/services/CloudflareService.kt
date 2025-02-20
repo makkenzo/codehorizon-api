@@ -1,4 +1,4 @@
-package com.makkenzo.codehorizon.com.makkenzo.codehorizon.services
+package com.makkenzo.codehorizon.services
 
 import io.minio.MinioClient
 import io.minio.PutObjectArgs

@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.models
 
-import com.makkenzo.codehorizon.com.makkenzo.codehorizon.models.CourseProgress
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 
