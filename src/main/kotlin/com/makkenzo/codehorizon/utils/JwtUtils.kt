@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.utils
 
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.services.TokenBlacklistService
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.SignatureAlgorithm
 import io.jsonwebtoken.security.Keys
@@ -10,7 +11,7 @@ import java.util.*
 import javax.crypto.SecretKey
 
 @Component
-class JwtUtils {
+class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
     private val secretKey: SecretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256)
     private val accessTokenExpirationMs = 900_000 // 15 minutes
     private val refreshTokenExpirationMs = 604_800_000 // 1 day
@@ -52,6 +53,10 @@ class JwtUtils {
 
     fun validateToken(token: String): Boolean {
         return try {
+            if (tokenBlacklistService.isTokenBlacklisted(token)) {
+                logger.info("Token is blacklisted")
+                return false
+            }
             Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token)
             logger.info("Valid token")
             true
@@ -60,6 +65,7 @@ class JwtUtils {
             false
         }
     }
+
 
     fun getEmailFromToken(token: String): String {
         return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body.subject

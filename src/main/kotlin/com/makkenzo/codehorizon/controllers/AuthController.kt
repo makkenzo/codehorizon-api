@@ -7,13 +7,16 @@ import com.makkenzo.codehorizon.dtos.LoginRequestDTO
 import com.makkenzo.codehorizon.dtos.RefreshTokenRequestDTO
 import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.services.TokenBlacklistService
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseCookie
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -23,7 +26,8 @@ import org.springframework.web.bind.annotation.*
 class AuthController(
     private val userService: UserService,
     private val jwtUtils: JwtUtils,
-    private val emailService: EmailService
+    private val emailService: EmailService,
+    private val tokenBlacklistService: TokenBlacklistService
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
@@ -101,5 +105,32 @@ class AuthController(
         val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
         val user = userService.getUserById(userId)
         return ResponseEntity.ok(user)
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Выход пользователя")
+    fun logout(
+        @CookieValue("access_token", required = false) accessToken: String?,
+        @CookieValue("refresh_token", required = false) refreshToken: String?
+    ): ResponseEntity<Any> {
+        if (accessToken != null) tokenBlacklistService.blacklistToken(accessToken)
+        if (refreshToken != null) tokenBlacklistService.blacklistToken(refreshToken)
+
+        val expiredCookie = ResponseCookie.from("access_token", "")
+            .path("/")
+            .httpOnly(true)
+            .maxAge(0)
+            .build()
+
+        val expiredRefreshCookie = ResponseCookie.from("refresh_token", "")
+            .path("/")
+            .httpOnly(true)
+            .maxAge(0)
+            .build()
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
+            .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
+            .body(mapOf("message" to "Вы успешно вышли"))
     }
 }
