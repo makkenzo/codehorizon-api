@@ -1,5 +1,6 @@
-package com.makkenzo.codehorizon.com.makkenzo.codehorizon.services
+package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.utils.JwtUtils
 import org.springframework.mail.javamail.JavaMailSender
@@ -17,7 +18,7 @@ class EmailService(
     private val domainUrl = System.getenv("DOMAIN_URL") ?: throw RuntimeException("Missing DOMAIN_URL")
     private val senderEmail = System.getenv("YANDEX_USERNAME") ?: throw RuntimeException("Missing YANDEX_USERNAME")
 
-    fun sendVerificationEmail(user: User, action: String) {
+    fun sendVerificationEmail(user: User, action: MailActionEnum) {
         val token = jwtUtils.generateVerificationToken(user, action)
         val verificationUrl = "$domainUrl/verify?token=$token&action=$action"
 
@@ -27,14 +28,27 @@ class EmailService(
             setVariable("verificationUrl", verificationUrl)
         }
 
-        val htmlContent = templateEngine.process("verification-email", context)
+        val htmlContent = when (action) {
+            MailActionEnum.REGISTRATION -> {
+                templateEngine.process("verification-email", context)
+            }
+
+            MailActionEnum.RESET_PASSWORD -> {
+                templateEngine.process("reset-password-email", context)
+            }
+        }
 
         val message = mailSender.createMimeMessage()
         val helper = MimeMessageHelper(message, true, "UTF-8")
 
+        val actionDescription = when (action) {
+            MailActionEnum.REGISTRATION -> "Регистрация"
+            MailActionEnum.RESET_PASSWORD -> "Сброс пароля"
+        }
+
         helper.setFrom(senderEmail)
         helper.setTo(user.email)
-        helper.setSubject("Подтверждение действия: $action")
+        helper.setSubject("Подтверждение действия: $actionDescription")
         helper.setText(
             htmlContent, true
         )

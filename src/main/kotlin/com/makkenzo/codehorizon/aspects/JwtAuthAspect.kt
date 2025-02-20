@@ -17,7 +17,7 @@ class JwtAuthAspect(private val jwtUtils: JwtUtils, private val request: HttpSer
         try {
             val token = extractToken(request)
             if (token != null && jwtUtils.validateToken(token)) {
-                val email = jwtUtils.getEmailFromToken(token)
+                val email = jwtUtils.getSubjectFromToken(token)
                 val authentication = UsernamePasswordAuthenticationToken(email, null, emptyList())
                 SecurityContextHolder.getContext().authentication = authentication
             } else {

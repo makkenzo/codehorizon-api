@@ -1,12 +1,10 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.JwtAuth
-import com.makkenzo.codehorizon.com.makkenzo.codehorizon.services.EmailService
-import com.makkenzo.codehorizon.dtos.AuthResponseDTO
-import com.makkenzo.codehorizon.dtos.LoginRequestDTO
-import com.makkenzo.codehorizon.dtos.RefreshTokenRequestDTO
-import com.makkenzo.codehorizon.dtos.RegisterRequestDTO
+import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.services.EmailService
 import com.makkenzo.codehorizon.services.TokenBlacklistService
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
@@ -31,16 +29,16 @@ class AuthController(
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
-    fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<Any> {
+    fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<MessageResponseDTO> {
         return try {
             val user =
                 userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
 
-            emailService.sendVerificationEmail(user, "registration")
+            emailService.sendVerificationEmail(user, MailActionEnum.REGISTRATION)
 
-            ResponseEntity.ok("Пользователь успешно зарегистрирован. Пожалуйста, подтвердите ваш email.")
+            ResponseEntity.ok(MessageResponseDTO("Пользователь успешно зарегистрирован. Пожалуйста, подтвердите ваш email."))
         } catch (e: IllegalArgumentException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(MessageResponseDTO(e.message!!))
         }
     }
 
@@ -64,7 +62,7 @@ class AuthController(
     fun refreshToken(@RequestBody request: RefreshTokenRequestDTO): ResponseEntity<AuthResponseDTO> {
         val refreshToken = request.refreshToken
         if (jwtUtils.validateToken(refreshToken)) {
-            val email = jwtUtils.getEmailFromToken(refreshToken)
+            val email = jwtUtils.getSubjectFromToken(refreshToken)
             val user = userService.findByRefreshToken(refreshToken)
             if (user != null && user.email == email) {
                 val newAccessToken = jwtUtils.generateAccessToken(user)
@@ -88,11 +86,11 @@ class AuthController(
             "refresh_token",
             required = false
         ) refreshToken: String?
-    ): ResponseEntity<Any> {
+    ): ResponseEntity<AuthResponseDTO> {
         return if (accessToken != null && jwtUtils.validateToken(accessToken) && refreshToken != null) {
-            ResponseEntity.ok(mapOf("accessToken" to accessToken, "refreshToken" to refreshToken))
+            ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
         } else {
-            ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "Wrong token!"))
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
         }
     }
 
@@ -112,7 +110,7 @@ class AuthController(
     fun logout(
         @CookieValue("access_token", required = false) accessToken: String?,
         @CookieValue("refresh_token", required = false) refreshToken: String?
-    ): ResponseEntity<Any> {
+    ): ResponseEntity<MessageResponseDTO> {
         if (accessToken != null) tokenBlacklistService.blacklistToken(accessToken)
         if (refreshToken != null) tokenBlacklistService.blacklistToken(refreshToken)
 
@@ -131,6 +129,30 @@ class AuthController(
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
             .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
-            .body(mapOf("message" to "Вы успешно вышли"))
+            .body(MessageResponseDTO("Вы успешно вышли"))
+    }
+
+    @PostMapping("/reset-password/check-login")
+    @Operation(summary = "Поиск логина для сброса пароля", security = [SecurityRequirement(name = "bearerAuth")])
+    fun checkLoginValidity(@RequestBody request: CheckLoginRequestDTO): ResponseEntity<MessageResponseDTO> {
+        val user = userService.findByLogin(request.login) ?: return ResponseEntity.notFound().build()
+
+        emailService.sendVerificationEmail(user, MailActionEnum.RESET_PASSWORD)
+
+        return ResponseEntity.ok(MessageResponseDTO("Пользователь с таким логином существует. На почту отправлено письмо для сброса пароля."))
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Сброс пароля", security = [SecurityRequirement(name = "bearerAuth")])
+    fun resetPassword(@RequestBody body: ResetPasswordRequestDTO, request: HttpServletRequest): ResponseEntity<User> {
+        val header = request.getHeader("Authorization")
+            ?: throw IllegalArgumentException("Authorization header is missing")
+        val token = header.substring(7).trim()
+        val email = jwtUtils.getSubjectFromToken(token)
+        val user = userService.findByLogin(email) ?: return ResponseEntity.notFound().build()
+
+        val newUser = userService.resetPassword(user, body.password, body.confirmPassword)
+
+        return ResponseEntity.ok(newUser)
     }
 }

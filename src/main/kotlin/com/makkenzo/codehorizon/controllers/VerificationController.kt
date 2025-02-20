@@ -1,5 +1,6 @@
-package com.makkenzo.codehorizon.com.makkenzo.codehorizon.controllers
+package com.makkenzo.codehorizon.controllers
 
+import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -25,7 +26,6 @@ class VerificationController(
     @Operation(summary = "Подтверждение действия")
     fun verify(
         @RequestParam token: String,
-        @RequestParam action: String,
         response: HttpServletResponse
     ): ResponseEntity<Any> {
         if (!jwtUtils.validateToken(token)) {
@@ -33,18 +33,19 @@ class VerificationController(
         }
 
         val tokenAction = jwtUtils.getActionFromToken(token)
-        if (tokenAction != action) {
-            return ResponseEntity.badRequest().body("Некорректный тип действия")
+
+        if (tokenAction !in MailActionEnum.entries.toTypedArray()) {
+            return ResponseEntity.badRequest().body("invalid action")
         }
 
-        val email = jwtUtils.getEmailFromToken(token)
+        val email = jwtUtils.getSubjectFromToken(token)
 
-        return when (action) {
-            "registration" -> {
+        val user = userService.findByEmail(email)
+            ?: return ResponseEntity.badRequest().body("Пользователь с email $email не найден")
+
+        return when (tokenAction) {
+            MailActionEnum.REGISTRATION -> {
                 val activated = userService.activateAccount(email)
-
-                val user = userService.findByEmail(email)
-                    ?: return ResponseEntity.badRequest().body("Пользователь с email $email не найден")
 
                 val accessToken = jwtUtils.generateAccessToken(user)
                 val refreshToken = jwtUtils.generateRefreshToken(user)
@@ -58,19 +59,18 @@ class VerificationController(
                     val accessTokenCookie = Cookie("access_token", accessToken).apply {
                         maxAge = 3600
                         isHttpOnly = true
-
+                        //secure = true
                         path = "/"
                     }
                     val refreshTokenCookie = Cookie("refresh_token", refreshToken).apply {
                         maxAge = 86400
                         isHttpOnly = true
-
+                        //secure = true
                         path = "/"
                     }
 
                     response.addCookie(accessTokenCookie)
                     response.addCookie(refreshTokenCookie)
-
 
                     return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, frontDomainUrl).build()
                 } else {
@@ -79,8 +79,12 @@ class VerificationController(
                 }
             }
 
-            else -> {
-                ResponseEntity.badRequest().body("Неизвестный тип действия: $action")
+            MailActionEnum.RESET_PASSWORD -> {
+                val frontDomainUrl =
+                    System.getenv("FRONT_DOMAIN_URL") ?: throw RuntimeException("Missing FRONT_DOMAIN_URL")
+
+                return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, "$frontDomainUrl/reset-password?token=$token&").build()
             }
         }
     }

@@ -3,7 +3,6 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.UserRepository
-import com.makkenzo.codehorizon.utils.JwtUtils
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -15,7 +14,6 @@ class UserService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
     private val profileService: ProfileService,
-    private val jwtUtils: JwtUtils,
 ) {
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
@@ -62,6 +60,18 @@ class UserService(
         return true
     }
 
+    fun resetPassword(user: User, password: String, confirmPassword: String): User {
+        if (password != confirmPassword) {
+            throw IllegalArgumentException("Passwords do not match")
+        }
+
+        validatePassword(password)
+
+        user.passwordHash = passwordEncoder.encode(password)
+
+        return userRepository.save(user)
+    }
+
     private fun validatePassword(password: String) {
         if (password.length < 8) {
             throw IllegalArgumentException("Password must be at least 8 characters long")
@@ -73,7 +83,7 @@ class UserService(
     }
 
     fun authenticateUser(login: String, password: String): User? {
-        val user = userRepository.findByUsernameOrEmail(login, login)
+        val user = findByLogin(login)
         return if (user != null && passwordEncoder.matches(password, user.passwordHash)) user else null
     }
 
@@ -94,5 +104,9 @@ class UserService(
 
     fun findByEmail(email: String): User? {
         return userRepository.findByEmail(email)
+    }
+
+    fun findByLogin(login: String): User? {
+        return userRepository.findByUsernameOrEmail(login, login)
     }
 }

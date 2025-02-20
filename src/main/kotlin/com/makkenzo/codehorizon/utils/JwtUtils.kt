@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.utils
 
+import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.services.TokenBlacklistService
 import io.jsonwebtoken.Jwts
@@ -40,7 +41,7 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
             .compact()
     }
 
-    fun generateVerificationToken(user: User, action: String): String {
+    fun generateVerificationToken(user: User, action: MailActionEnum): String {
         return Jwts.builder()
             .setSubject(user.email)
             .claim("id", user.id)
@@ -67,7 +68,7 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
     }
 
 
-    fun getEmailFromToken(token: String): String {
+    fun getSubjectFromToken(token: String): String {
         return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body.subject
     }
 
@@ -76,7 +77,9 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
             .parseClaimsJws(token).body.get("id") as String
     }
 
-    fun getActionFromToken(token: String): String {
-        return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body["action"] as String
+    fun getActionFromToken(token: String): MailActionEnum {
+        val action =
+            Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body["action"] as String
+        return MailActionEnum.valueOf(action)
     }
 }

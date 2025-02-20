@@ -10,7 +10,7 @@ data class User(
     var isVerified: Boolean = false,
     val username: String,
     val email: String,
-    val passwordHash: String,
+    var passwordHash: String,
     val refreshToken: String? = null,
     val roles: List<String> = listOf("USER"),
     val courses: MutableList<CourseProgress> = mutableListOf(),
