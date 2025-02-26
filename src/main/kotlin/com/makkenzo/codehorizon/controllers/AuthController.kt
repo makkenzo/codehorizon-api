@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.CookieAuth
+import com.makkenzo.codehorizon.configs.CookieConfig
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
@@ -25,7 +26,8 @@ class AuthController(
     private val userService: UserService,
     private val jwtUtils: JwtUtils,
     private val emailService: EmailService,
-    private val tokenBlacklistService: TokenBlacklistService
+    private val tokenBlacklistService: TokenBlacklistService,
+    private val cookieProperties: CookieConfig
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
@@ -54,12 +56,14 @@ class AuthController(
 
             val accessCookie = ResponseCookie.from("access_token", accessToken)
                 .httpOnly(true)
+                .secure(cookieProperties.secure)
                 .path("/")
                 .maxAge(60 * 15L) // 15 минут
                 .build()
 
             val refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
                 .httpOnly(true)
+                .secure(cookieProperties.secure)
                 .path("/")
                 .maxAge(60 * 60 * 24L) // 24 часа
                 .build()
@@ -95,12 +99,14 @@ class AuthController(
 
                 val accessCookie = ResponseCookie.from("access_token", newAccessToken)
                     .httpOnly(true)
+                    .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 15L) // 15 минут
                     .build()
 
                 val refreshCookie = ResponseCookie.from("refresh_token", newRefreshToken)
                     .httpOnly(true)
+                    .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 60 * 24L) // 24 часа
                     .build()
@@ -157,12 +163,14 @@ class AuthController(
         val expiredCookie = ResponseCookie.from("access_token", "")
             .path("/")
             .httpOnly(true)
+            .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
 
         val expiredRefreshCookie = ResponseCookie.from("refresh_token", "")
             .path("/")
             .httpOnly(true)
+            .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
 
