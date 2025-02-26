@@ -121,25 +121,6 @@ class AuthController(
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
     }
 
-    @GetMapping("/token")
-    @Operation(summary = "Извлекает токены из печеньки")
-    fun getAccessToken(
-        @CookieValue(
-            "access_token",
-            required = false
-        ) accessToken: String?,
-        @CookieValue(
-            "refresh_token",
-            required = false
-        ) refreshToken: String?
-    ): ResponseEntity<AuthResponseDTO> {
-        return if (accessToken != null && jwtUtils.validateToken(accessToken) && refreshToken != null) {
-            ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
-        } else {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
-        }
-    }
-
     @GetMapping("/me")
     @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
     @CookieAuth
@@ -179,6 +160,7 @@ class AuthController(
             .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
             .build()
     }
+    
 
     @PostMapping("/reset-password/check-login")
     @Operation(summary = "Поиск логина для сброса пароля", security = [SecurityRequirement(name = "bearerAuth")])
