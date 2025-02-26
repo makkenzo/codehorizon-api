@@ -20,7 +20,10 @@ class SecurityConfig() {
     }
 
     @Bean
-    fun filterChain(http: HttpSecurity): SecurityFilterChain {
+    fun filterChain(
+        http: HttpSecurity,
+        customAuthenticationEntryPoint: CustomAuthenticationEntryPoint
+    ): SecurityFilterChain {
         http.csrf { it.disable() }
             .authorizeHttpRequests { requests ->
                 requests
@@ -28,11 +31,7 @@ class SecurityConfig() {
             }
             .exceptionHandling { exceptions ->
                 exceptions
-                    .authenticationEntryPoint { request, response, authException ->
-                        response.status = HttpStatus.UNAUTHORIZED.value()
-                        response.contentType = "application/json"
-                        response.writer.write("{\"error\": \"Unauthorized: ${authException.message}\"}")
-                    }
+                    .authenticationEntryPoint(customAuthenticationEntryPoint)
                     .accessDeniedHandler { request, response, accessDeniedException ->
                         response.status = HttpStatus.FORBIDDEN.value()
                         response.contentType = "application/json"

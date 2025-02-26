@@ -15,7 +15,6 @@ class CookieAuthAspect(
     private val jwtUtils: JwtUtils,
     private val request: HttpServletRequest
 ) {
-
     @Before("@annotation(com.makkenzo.codehorizon.annotations.CookieAuth)")
     fun checkCookieAuth() {
         try {

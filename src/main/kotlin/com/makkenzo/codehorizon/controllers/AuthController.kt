@@ -160,7 +160,6 @@ class AuthController(
             .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
             .build()
     }
-    
 
     @PostMapping("/reset-password/check-login")
     @Operation(summary = "Поиск логина для сброса пароля", security = [SecurityRequirement(name = "bearerAuth")])

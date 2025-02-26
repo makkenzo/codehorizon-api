@@ -6,6 +6,7 @@ import com.makkenzo.codehorizon.services.TokenBlacklistService
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.SignatureAlgorithm
 import io.jsonwebtoken.security.Keys
+import io.jsonwebtoken.security.SignatureException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.*
@@ -61,12 +62,14 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
             Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token)
             logger.info("Valid token")
             true
+        } catch (e: SignatureException) {
+            logger.warn("Invalid token signature: ${e.message}")
+            false
         } catch (e: Exception) {
-            logger.info("Invalid token", e)
+            logger.warn("Token validation error: ${e.message}")
             false
         }
     }
-
 
     fun getSubjectFromToken(token: String): String {
         return Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body.subject
