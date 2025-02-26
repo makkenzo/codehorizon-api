@@ -1,6 +1,6 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.JwtAuth
+import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
@@ -44,14 +44,30 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Аутентификация пользователя")
-    fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<AuthResponseDTO> {
+    fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<Void> {
         val user = userService.authenticateUser(request.login, request.password)
         return if (user != null) {
             val accessToken = jwtUtils.generateAccessToken(user)
             val refreshToken = jwtUtils.generateRefreshToken(user)
 
             userService.updateRefreshToken(user.email, refreshToken)
-            ResponseEntity.ok(AuthResponseDTO(accessToken, refreshToken))
+
+            val accessCookie = ResponseCookie.from("access_token", accessToken)
+                .httpOnly(true)
+                .path("/")
+                .maxAge(60 * 15L) // 15 минут
+                .build()
+
+            val refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
+                .httpOnly(true)
+                .path("/")
+                .maxAge(60 * 60 * 24L) // 24 часа
+                .build()
+
+            ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .build()
         } else {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
         }
@@ -59,8 +75,16 @@ class AuthController(
 
     @PostMapping("/refresh-token")
     @Operation(summary = "Обновление токена")
-    fun refreshToken(@RequestBody request: RefreshTokenRequestDTO): ResponseEntity<AuthResponseDTO> {
-        val refreshToken = request.refreshToken
+    fun refreshToken(
+        @CookieValue(
+            "refresh_token",
+            required = false
+        ) refreshToken: String?
+    ): ResponseEntity<Void> {
+        if (refreshToken == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        }
+
         if (jwtUtils.validateToken(refreshToken)) {
             val email = jwtUtils.getSubjectFromToken(refreshToken)
             val user = userService.findByRefreshToken(refreshToken)
@@ -68,7 +92,23 @@ class AuthController(
                 val newAccessToken = jwtUtils.generateAccessToken(user)
                 val newRefreshToken = jwtUtils.generateRefreshToken(user)
                 userService.updateRefreshToken(email, newRefreshToken)
-                return ResponseEntity.ok(AuthResponseDTO(newAccessToken, newRefreshToken))
+
+                val accessCookie = ResponseCookie.from("access_token", newAccessToken)
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(60 * 15L) // 15 минут
+                    .build()
+
+                val refreshCookie = ResponseCookie.from("refresh_token", newRefreshToken)
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(60 * 60 * 24L) // 24 часа
+                    .build()
+
+                return ResponseEntity.noContent()
+                    .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
+                    .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                    .build()
             }
         }
 
@@ -96,11 +136,11 @@ class AuthController(
 
     @GetMapping("/me")
     @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun getMe(request: HttpServletRequest): ResponseEntity<User> {
-        val token = request.getHeader("Authorization")
-            ?: throw IllegalArgumentException("Authorization header is missing")
-        val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
         val user = userService.getUserById(userId)
         return ResponseEntity.ok(user)
     }
@@ -110,7 +150,7 @@ class AuthController(
     fun logout(
         @CookieValue("access_token", required = false) accessToken: String?,
         @CookieValue("refresh_token", required = false) refreshToken: String?
-    ): ResponseEntity<MessageResponseDTO> {
+    ): ResponseEntity<Void> {
         if (accessToken != null) tokenBlacklistService.blacklistToken(accessToken)
         if (refreshToken != null) tokenBlacklistService.blacklistToken(refreshToken)
 
@@ -126,10 +166,10 @@ class AuthController(
             .maxAge(0)
             .build()
 
-        return ResponseEntity.ok()
+        return ResponseEntity.noContent()
             .header(HttpHeaders.SET_COOKIE, expiredCookie.toString())
             .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
-            .body(MessageResponseDTO("Вы успешно вышли"))
+            .build()
     }
 
     @PostMapping("/reset-password/check-login")

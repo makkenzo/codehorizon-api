@@ -1,6 +1,6 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.JwtAuth
+import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
@@ -81,7 +81,7 @@ class CourseController(
 
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun createCourse(
         @RequestParam("title") title: String,
         @RequestParam("description") description: String,
@@ -99,10 +99,10 @@ class CourseController(
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
-            val token =
-                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
             val authorId =
-                jwtUtils.getIdFromToken(token.substring(7).trim())
+                jwtUtils.getIdFromToken(token)
 
             val imageUrl = imageFile?.let { cloudflareService.uploadFileToR2(it, "course_images") }
             val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
@@ -120,17 +120,17 @@ class CourseController(
 
     @PostMapping("/{courseId}/lessons")
     @Operation(summary = "Добавить лекцию в курс", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun addLesson(
         @PathVariable courseId: String,
         @RequestBody lesson: LessonRequestDTO,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
-            val token =
-                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
             val authorId =
-                jwtUtils.getIdFromToken(token.substring(7).trim()) // Получаем ID пользователя из токена
+                jwtUtils.getIdFromToken(token) // Получаем ID пользователя из токена
             val updatedCourse = courseService.addLesson(courseId, lesson, authorId)
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {
@@ -142,16 +142,16 @@ class CourseController(
 
     @PutMapping("/{courseId}")
     @Operation(summary = "Обновить курс", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun updateCourse(
         @PathVariable courseId: String,
         @RequestBody requestBody: CreateCourseRequestDTO,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
-            val token =
-                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val authorId = jwtUtils.getIdFromToken(token)
             val updatedCourse =
                 courseService.updateCourse(
                     courseId,
@@ -172,7 +172,7 @@ class CourseController(
 
     @PutMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Обновить лекцию в курсе", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun updateLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
@@ -180,9 +180,9 @@ class CourseController(
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
-            val token =
-                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val authorId = jwtUtils.getIdFromToken(token)
             val updatedCourse = courseService.updateLesson(courseId, lessonId, updatedLesson, authorId)
 
             ResponseEntity.ok(updatedCourse)
@@ -197,16 +197,16 @@ class CourseController(
 
     @DeleteMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Удалить лекцию из курса", security = [SecurityRequirement(name = "bearerAuth")])
-    @JwtAuth
+    @CookieAuth
     fun deleteLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
         request: HttpServletRequest
     ): ResponseEntity<Any> {
         return try {
-            val token =
-                request.getHeader("Authorization") ?: throw IllegalArgumentException("Authorization header is missing")
-            val authorId = jwtUtils.getIdFromToken(token.substring(7).trim())
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val authorId = jwtUtils.getIdFromToken(token)
             val updatedCourse = courseService.deleteLesson(courseId, lessonId, authorId)
             ResponseEntity.ok(updatedCourse)
         } catch (e: AccessDeniedException) {

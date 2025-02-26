@@ -13,5 +13,4 @@ data class Profile(
     val lastName: String? = null,
     val location: String? = null,
     val website: String? = null,
-    val socialLinks: Map<String, String>? = null,
 )

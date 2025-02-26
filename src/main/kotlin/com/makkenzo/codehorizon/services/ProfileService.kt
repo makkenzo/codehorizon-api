@@ -27,15 +27,14 @@ class ProfileService(private val profileRepository: ProfileRepository) {
     fun updateProfile(id: String, updatedProfile: Profile): Profile {
         val existingProfile = profileRepository.findById(id)
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден") }
-        
+
         val profileToUpdate = existingProfile.copy(
             avatarUrl = updatedProfile.avatarUrl ?: existingProfile.avatarUrl,
             bio = updatedProfile.bio ?: existingProfile.bio,
             firstName = updatedProfile.firstName ?: existingProfile.firstName,
             lastName = updatedProfile.lastName ?: existingProfile.lastName,
             location = updatedProfile.location ?: existingProfile.location,
-            website = updatedProfile.website ?: existingProfile.website,
-            socialLinks = updatedProfile.socialLinks ?: existingProfile.socialLinks
+            website = updatedProfile.website ?: existingProfile.website
         )
         return profileRepository.save(profileToUpdate)
     }

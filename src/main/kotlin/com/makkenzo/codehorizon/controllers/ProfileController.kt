@@ -1,6 +1,6 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.JwtAuth
+import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.services.ProfileService
 import com.makkenzo.codehorizon.utils.JwtUtils
@@ -23,11 +23,11 @@ class ProfileController(
         summary = "Получение профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @JwtAuth
+    @CookieAuth
     fun getProfile(request: HttpServletRequest): ResponseEntity<Profile> {
-        val token = request.getHeader("Authorization")
-            ?: throw IllegalArgumentException("Authorization header is missing")
-        val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
         val profile = profileService.getProfileByUserId(userId)
         return ResponseEntity.ok(profile)
     }
@@ -37,14 +37,14 @@ class ProfileController(
         summary = "Обновление профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @JwtAuth
+    @CookieAuth
     fun updateProfile(
         @RequestBody profile: Profile,
         request: HttpServletRequest
     ): ResponseEntity<Profile> {
-        val token = request.getHeader("Authorization")
-            ?: throw IllegalArgumentException("Authorization header is missing")
-        val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
         val updatedProfile = profileService.updateProfile(userId, profile)
         return ResponseEntity.ok(updatedProfile)
     }
@@ -54,17 +54,17 @@ class ProfileController(
         summary = "Удаление профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @JwtAuth
+    @CookieAuth
     fun deleteProfile(request: HttpServletRequest): ResponseEntity<Void> {
-        val token = request.getHeader("Authorization")
-            ?: throw IllegalArgumentException("Authorization header is missing")
-        val userId = jwtUtils.getIdFromToken(token.substring(7).trim())
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
         profileService.deleteProfile(userId)
         return ResponseEntity.noContent().build()
     }
 
     @GetMapping("/user/{userId}")
-    @Operation(summary = "Получение профиля по userId (например, для администратора)")
+    @Operation(summary = "Получение профиля по userId")
     fun getProfileByUserId(@PathVariable userId: String): ResponseEntity<Profile> {
         val profile = profileService.getProfileByUserId(userId)
         return ResponseEntity.ok(profile)
