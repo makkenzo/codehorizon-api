@@ -16,7 +16,7 @@ class EmailService(
     private val templateEngine: TemplateEngine
 ) {
     private val domainUrl = System.getenv("DOMAIN_URL") ?: throw RuntimeException("Missing DOMAIN_URL")
-    private val senderEmail = System.getenv("YANDEX_USERNAME") ?: throw RuntimeException("Missing YANDEX_USERNAME")
+    private val senderEmail = System.getenv("SMTP_USERNAME") ?: throw RuntimeException("Missing SMTP_USERNAME")
 
     fun sendVerificationEmail(user: User, action: MailActionEnum) {
         val token = jwtUtils.generateVerificationToken(user, action)
