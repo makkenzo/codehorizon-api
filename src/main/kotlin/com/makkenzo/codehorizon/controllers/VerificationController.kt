@@ -58,13 +58,13 @@ class VerificationController(
                 if (activated) {
                     val accessTokenCookie = Cookie("access_token", accessToken).apply {
                         maxAge = 3600
-                        isHttpOnly = true
+                        isHttpOnly = false
                         //secure = true
                         path = "/"
                     }
                     val refreshTokenCookie = Cookie("refresh_token", refreshToken).apply {
                         maxAge = 86400
-                        isHttpOnly = true
+                        isHttpOnly = false
                         //secure = true
                         path = "/"
                     }
