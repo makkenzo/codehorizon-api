@@ -27,4 +27,13 @@ class CloudflareService(private val minioClient: MinioClient) {
 
         return "https://codehorizon-bucket.makkenzo.com/$filePath"
     }
+
+    fun validateFile(file: MultipartFile) {
+        val allowedTypes = listOf("image/png", "image/jpeg", "image/webp")
+        val maxSze = 5 * 1024 * 1024 // 5MB
+
+        if (file.isEmpty) throw IllegalArgumentException("File is empty")
+        if (!allowedTypes.contains(file.contentType)) throw IllegalArgumentException("Invalid file type")
+        if (file.size > maxSze) throw IllegalArgumentException("File size is too large")
+    }
 }

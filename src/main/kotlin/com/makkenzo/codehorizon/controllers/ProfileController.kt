@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.CookieAuth
+import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.services.ProfileService
 import com.makkenzo.codehorizon.utils.JwtUtils
@@ -39,7 +40,7 @@ class ProfileController(
     )
     @CookieAuth
     fun updateProfile(
-        @RequestBody profile: Profile,
+        @RequestBody profile: UpdateProfileDTO,
         request: HttpServletRequest
     ): ResponseEntity<Profile> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
