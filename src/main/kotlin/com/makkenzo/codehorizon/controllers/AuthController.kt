@@ -143,14 +143,14 @@ class AuthController(
 
         val expiredCookie = ResponseCookie.from("access_token", "")
             .path("/")
-            .httpOnly(true)
+            .httpOnly(false)
             .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
 
         val expiredRefreshCookie = ResponseCookie.from("refresh_token", "")
             .path("/")
-            .httpOnly(true)
+            .httpOnly(false)
             .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
