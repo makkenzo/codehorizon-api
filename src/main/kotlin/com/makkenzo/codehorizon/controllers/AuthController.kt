@@ -98,14 +98,14 @@ class AuthController(
                 userService.updateRefreshToken(email, newRefreshToken)
 
                 val accessCookie = ResponseCookie.from("access_token", newAccessToken)
-                    .httpOnly(true)
+                    .httpOnly(false)
                     .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 15L) // 15 минут
                     .build()
 
                 val refreshCookie = ResponseCookie.from("refresh_token", newRefreshToken)
-                    .httpOnly(true)
+                    .httpOnly(false)
                     .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 60 * 24L) // 24 часа
