@@ -55,14 +55,14 @@ class AuthController(
             userService.updateRefreshToken(user.email, refreshToken)
 
             val accessCookie = ResponseCookie.from("access_token", accessToken)
-                .httpOnly(false)
+                .httpOnly(true)
                 .secure(cookieProperties.secure)
                 .path("/")
                 .maxAge(60 * 15L) // 15 минут
                 .build()
 
             val refreshCookie = ResponseCookie.from("refresh_token", refreshToken)
-                .httpOnly(false)
+                .httpOnly(true)
                 .secure(cookieProperties.secure)
                 .path("/")
                 .maxAge(60 * 60 * 24L) // 24 часа
@@ -98,14 +98,14 @@ class AuthController(
                 userService.updateRefreshToken(email, newRefreshToken)
 
                 val accessCookie = ResponseCookie.from("access_token", newAccessToken)
-                    .httpOnly(false)
+                    .httpOnly(true)
                     .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 15L) // 15 минут
                     .build()
 
                 val refreshCookie = ResponseCookie.from("refresh_token", newRefreshToken)
-                    .httpOnly(false)
+                    .httpOnly(true)
                     .secure(cookieProperties.secure)
                     .path("/")
                     .maxAge(60 * 60 * 24L) // 24 часа
@@ -143,14 +143,14 @@ class AuthController(
 
         val expiredCookie = ResponseCookie.from("access_token", "")
             .path("/")
-            .httpOnly(false)
+            .httpOnly(true)
             .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
 
         val expiredRefreshCookie = ResponseCookie.from("refresh_token", "")
             .path("/")
-            .httpOnly(false)
+            .httpOnly(true)
             .secure(cookieProperties.secure)
             .maxAge(0)
             .build()
