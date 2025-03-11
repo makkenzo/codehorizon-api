@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -21,7 +22,8 @@ class CourseService(
         price: Double,
         authorId: String,
         imagePreview: String?,
-        videoPreview: String?
+        videoPreview: String?,
+        difficultyLevel: CourseDifficultyLevels
     ): Course {
         val author = userService.findById(authorId) ?: throw IllegalArgumentException("User not found")
 
@@ -35,7 +37,8 @@ class CourseService(
             authorId = authorId,
             price = price,
             imagePreview = imagePreview,
-            videoPreview = videoPreview
+            videoPreview = videoPreview,
+            difficulty = difficultyLevel
         )
         val savedCourse = courseRepository.save(course)
 

@@ -5,6 +5,7 @@ import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.services.CloudflareService
 import com.makkenzo.codehorizon.services.CourseService
@@ -86,6 +87,7 @@ class CourseController(
         @RequestParam("title") title: String,
         @RequestParam("description") description: String,
         @RequestParam("price") price: Double,
+        @RequestParam("difficultyLevel") difficultyLevel: CourseDifficultyLevels,
         @Parameter(
             description = "Файл превью для изображения",
             schema = Schema(type = "string", format = "binary")
@@ -108,7 +110,8 @@ class CourseController(
             val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
 
 
-            val course = courseService.createCourse(title, description, price, authorId, imageUrl, videoUrl)
+            val course =
+                courseService.createCourse(title, description, price, authorId, imageUrl, videoUrl, difficultyLevel)
             ResponseEntity.ok(course)
         } catch (e: AccessDeniedException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))

@@ -13,7 +13,13 @@ data class Course(
     val authorId: String,
     var lessons: MutableList<Lesson> = mutableListOf(),
     var rating: Double = 0.0,
-    var reviews: MutableList<Review> = mutableListOf(),
     var price: Double = 0.0,
     var discount: Double = 0.0,
+    val difficulty: CourseDifficultyLevels,
 )
+
+enum class CourseDifficultyLevels {
+    BEGINNER,
+    INTERMEDIATE,
+    ADVANCED
+}
