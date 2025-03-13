@@ -6,5 +6,7 @@ data class Lesson(
     var title: String,
     var content: String,
     var codeExamples: List<String> = emptyList(),
-    var tasks: List<Task> = emptyList()
+    var tasks: List<Task> = emptyList(),
+    var attachments: List<Attachment> = emptyList(),
+    var mainAttachment: String? = null
 )
