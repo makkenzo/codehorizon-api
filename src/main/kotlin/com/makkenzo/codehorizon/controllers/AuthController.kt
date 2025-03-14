@@ -82,13 +82,9 @@ class AuthController(
     fun refreshToken(
         @CookieValue(
             "refresh_token",
-            required = false
-        ) refreshToken: String?
+            required = true
+        ) refreshToken: String
     ): ResponseEntity<Void> {
-        if (refreshToken == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
-        }
-
         if (jwtUtils.validateToken(refreshToken)) {
             val email = jwtUtils.getSubjectFromToken(refreshToken)
             val user = userService.findByRefreshToken(refreshToken)

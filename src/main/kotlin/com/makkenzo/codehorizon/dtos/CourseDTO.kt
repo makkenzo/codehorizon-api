@@ -9,6 +9,7 @@ data class CourseDTO(
     val imagePreview: String?,
     val videoPreview: String?,
     val authorId: String,
+    val authorName: String,
     val rating: Double,
     val price: Double,
     val discount: Double,

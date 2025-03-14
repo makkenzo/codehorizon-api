@@ -9,11 +9,15 @@ import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.bson.Document
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.aggregation.Aggregation
+import org.springframework.data.mongodb.core.aggregation.AggregationOperation
+import org.springframework.data.mongodb.core.aggregation.ArrayOperators
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators.ToString
 import org.springframework.data.mongodb.core.query.Criteria
-import org.springframework.data.mongodb.core.query.Query
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
@@ -85,32 +89,99 @@ class CourseService(
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
-        val query = Query()
-        query.fields().exclude("lessons")
+        // Собираем критерии фильтрации
+        val criteria = Criteria()
+        title?.let { criteria.and("title").regex(".*$it.*", "i") }
+        description?.let { criteria.and("description").regex(".*$it.*", "i") }
+        minRating?.let { criteria.and("rating").gte(it) }
+        maxDuration?.let { criteria.and("duration").lte(it) }
+        category?.let { criteria.and("category").`is`(it) }
+        difficulty?.let { criteria.and("difficulty").`is`(it) }
 
-        title?.let { query.addCriteria(Criteria.where("title").regex(".*$it.*", "i")) }
-        description?.let { query.addCriteria(Criteria.where("description").regex(".*$it.*", "i")) }
-        minRating?.let { query.addCriteria(Criteria.where("rating").gte(it)) }
-        maxDuration?.let { query.addCriteria(Criteria.where("duration").lte(it)) }
-        category?.let { query.addCriteria(Criteria.where("category").`is`(it)) }
-        difficulty?.let { query.addCriteria(Criteria.where("difficulty").`is`(it)) }
+        // Стадия match с фильтрами
+        val matchStage = Aggregation.match(criteria)
+        // Стадия lookup для объединения с коллекцией профилей
+        val lookupStage = Aggregation.lookup("profiles", "authorId", "userId", "authorProfile")
+        // Стадия project: исключаем lessons и выбираем нужные поля, а также извлекаем имя автора из объединённого массива
+        val projectStage = Aggregation.project(
+            "title",
+            "description",
+            "imagePreview",
+            "videoPreview",
+            "authorId",
+            "rating",
+            "price",
+            "discount",
+            "difficulty"
+        )
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.firstName").elementAt(0)).`as`("authorFirstName")
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.lastName").elementAt(0)).`as`("authorLastName")
+            .and(ToString.toString("_id")).`as`("id")
 
+
+        // Определяем сортировку
         val sort = when (sortBy) {
             "price_asc" -> Sort.by("price").ascending()
             "price_desc" -> Sort.by("price").descending()
             "popular" -> Sort.by("rating").descending()
             else -> Sort.unsorted()
         }
-        query.with(sort)
-        query.with(pageable)
 
-        val courses = mongoTemplate.find(query, Course::class.java)
-        val totalElements = mongoTemplate.count(query, Course::class.java)
+        // Создаем список операций агрегации
+        val aggregationOperations = mutableListOf<AggregationOperation>()
+        aggregationOperations.add(matchStage)
+        aggregationOperations.add(lookupStage)
+        aggregationOperations.add(projectStage)
+        // Добавляем стадию сортировки только если она не пустая
+        if (sort.isSorted) {
+            aggregationOperations.add(Aggregation.sort(sort))
+        }
+        // Пагинация: пропустить и ограничить
+        aggregationOperations.add(Aggregation.skip((pageable.pageNumber * pageable.pageSize).toLong()))
+        aggregationOperations.add(Aggregation.limit(pageable.pageSize.toLong()))
+
+        val aggregation = Aggregation.newAggregation(aggregationOperations)
+
+        // Выполняем агрегацию
+        val aggregationResult = mongoTemplate.aggregate(aggregation, "courses", Document::class.java)
+        val coursesDTO: List<CourseDTO> = aggregationResult.mappedResults.map { doc ->
+            val authorFirstName = doc.getString("authorFirstName") ?: ""
+            val authorLastName = doc.getString("authorLastName") ?: ""
+            val authorName =
+                if (authorFirstName.isBlank() && authorLastName.isBlank()) "Неизвестный автор" else "$authorFirstName $authorLastName".trim()
+
+            CourseDTO(
+                id = doc.get("_id").toString(),
+                title = doc.getString("title") ?: "",
+                description = doc.getString("description") ?: "",
+                imagePreview = doc.getString("imagePreview"),
+                videoPreview = doc.getString("videoPreview"),
+                authorId = doc.getString("authorId") ?: "",
+                rating = doc.getDouble("rating") ?: 0.0,
+                price = doc.getDouble("price") ?: 0.0,
+                discount = doc.getDouble("discount") ?: 0.0,
+                difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
+                    ?: CourseDifficultyLevels.BEGINNER,
+                authorName = authorName
+            )
+        }
+
+        // Отдельная агрегация для подсчета общего количества документов
+        val countAggregation = Aggregation.newAggregation(
+            matchStage,
+            Aggregation.count().`as`("total")
+        )
+        val countResult = mongoTemplate.aggregate(countAggregation, "courses", Document::class.java)
+        val totalElements = if (countResult.mappedResults.isNotEmpty()) {
+            countResult.mappedResults[0].getInteger("total").toLong()
+        } else {
+            0L
+        }
         val totalPages =
             (totalElements / pageable.pageSize).toInt() + if (totalElements % pageable.pageSize > 0) 1 else 0
 
         return PagedResponseDTO(
-            content = courses.map { it.toDto() },
+            content = coursesDTO,
             pageNumber = pageable.pageNumber,
             pageSize = pageable.pageSize,
             totalElements = totalElements,
