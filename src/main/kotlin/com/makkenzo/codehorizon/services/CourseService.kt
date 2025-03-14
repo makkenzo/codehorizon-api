@@ -9,10 +9,11 @@ import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
@@ -20,7 +21,8 @@ import org.springframework.stereotype.Service
 class CourseService(
     private val courseRepository: CourseRepository,
     private val userService: UserService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val mongoTemplate: MongoTemplate
 ) {
     fun createCourse(
         title: String,
@@ -83,30 +85,37 @@ class CourseService(
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
+        val query = Query()
+        query.fields().exclude("lessons")
+
+        title?.let { query.addCriteria(Criteria.where("title").regex(".*$it.*", "i")) }
+        description?.let { query.addCriteria(Criteria.where("description").regex(".*$it.*", "i")) }
+        minRating?.let { query.addCriteria(Criteria.where("rating").gte(it)) }
+        maxDuration?.let { query.addCriteria(Criteria.where("duration").lte(it)) }
+        category?.let { query.addCriteria(Criteria.where("category").`is`(it)) }
+        difficulty?.let { query.addCriteria(Criteria.where("difficulty").`is`(it)) }
+
         val sort = when (sortBy) {
             "price_asc" -> Sort.by("price").ascending()
             "price_desc" -> Sort.by("price").descending()
             "popular" -> Sort.by("rating").descending()
             else -> Sort.unsorted()
         }
+        query.with(sort)
+        query.with(pageable)
 
-        val pageRequest = PageRequest.of(pageable.pageNumber, pageable.pageSize, sort)
-
-        val courses: Page<Course> = if (!title.isNullOrEmpty() || !description.isNullOrEmpty()) {
-            courseRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                title ?: "", description ?: "", pageRequest
-            )
-        } else {
-            courseRepository.findAll(pageRequest)
-        }
+        val courses = mongoTemplate.find(query, Course::class.java)
+        val totalElements = mongoTemplate.count(query, Course::class.java)
+        val totalPages =
+            (totalElements / pageable.pageSize).toInt() + if (totalElements % pageable.pageSize > 0) 1 else 0
 
         return PagedResponseDTO(
-            content = courses.content.map { it.toDto() },
-            pageNumber = courses.number,
-            pageSize = courses.size,
-            totalElements = courses.totalElements,
-            totalPages = courses.totalPages,
-            isLast = courses.isLast
+            content = courses.map { it.toDto() },
+            pageNumber = pageable.pageNumber,
+            pageSize = pageable.pageSize,
+            totalElements = totalElements,
+            totalPages = totalPages,
+            isLast = pageable.pageNumber >= totalPages - 1
         )
     }
 
