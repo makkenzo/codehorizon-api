@@ -36,6 +36,7 @@ class CourseService(
         description: String,
         price: Double,
         authorId: String,
+        category: String,
         imagePreview: String?,
         videoPreview: String?,
         difficultyLevel: CourseDifficultyLevels
@@ -53,7 +54,8 @@ class CourseService(
             price = price,
             imagePreview = imagePreview,
             videoPreview = videoPreview,
-            difficulty = difficultyLevel
+            difficulty = difficultyLevel,
+            category = category,
         )
         val savedCourse = courseRepository.save(course)
 
@@ -87,22 +89,31 @@ class CourseService(
         title: String?,
         description: String?,
         minRating: Double?,
+        minDuration: Double?,
         maxDuration: Double?,
-        category: String?,
+        category: List<String>?,
         difficulty: List<CourseDifficultyLevels>?,
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
-        val criteria = Criteria()
-        title?.let { criteria.and("title").regex(".*$it.*", "i") }
-        description?.let { criteria.and("description").regex(".*$it.*", "i") }
-        minRating?.let { criteria.and("rating").gte(it) }
-        maxDuration?.let { criteria.and("duration").lte(it) }
-        category?.let { criteria.and("category").`is`(it) }
-        difficulty?.let { criteria.and("difficulty").`in`(it) }
+        val criteria = mutableListOf<Criteria>()
 
-        // Стадия match с фильтрами
-        val matchStage = Aggregation.match(criteria)
+        title?.let { criteria.add(Criteria.where("title").regex(".*$it.*", "i")) }
+        description?.let { criteria.add(Criteria.where("description").regex(".*$it.*", "i")) }
+        minRating?.let { criteria.add(Criteria.where("rating").gte(it)) }
+        category?.let { criteria.add(Criteria.where("category").`in`(it)) }
+        difficulty?.let { criteria.add(Criteria.where("difficulty").`in`(it)) }
+
+        val durationCriteria = mutableListOf<Criteria>()
+        minDuration?.let { durationCriteria.add(Criteria.where("videoLength").gte(it)) }
+        maxDuration?.let { durationCriteria.add(Criteria.where("videoLength").lte(it)) }
+        if (durationCriteria.isNotEmpty()) {
+            criteria.add(Criteria().andOperator(*durationCriteria.toTypedArray()))
+        }
+
+        val finalCriteria = if (criteria.isNotEmpty()) Criteria().andOperator(*criteria.toTypedArray()) else Criteria()
+
+        val matchStage = Aggregation.match(finalCriteria)
         // Стадия lookup для объединения с коллекцией профилей
         val lookupStage = Aggregation.lookup("profiles", "authorId", "userId", "authorProfile")
         // Стадия project: исключаем lessons и выбираем нужные поля, а также извлекаем имя автора из объединённого массива
@@ -115,7 +126,9 @@ class CourseService(
             "rating",
             "price",
             "discount",
-            "difficulty"
+            "difficulty",
+            "category",
+            "videoLength",
         )
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.firstName").elementAt(0)).`as`("authorFirstName")
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.lastName").elementAt(0)).`as`("authorLastName")
@@ -165,7 +178,9 @@ class CourseService(
                 discount = doc.getDouble("discount") ?: 0.0,
                 difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
                     ?: CourseDifficultyLevels.BEGINNER,
-                authorName = authorName
+                authorName = authorName,
+                category = doc.getString("category") ?: "Без категории",
+                videoLength = doc.getDouble("videoLength") ?: 0.0
             )
         }
 

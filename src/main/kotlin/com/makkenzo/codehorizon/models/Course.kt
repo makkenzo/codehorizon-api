@@ -16,6 +16,8 @@ data class Course(
     var price: Double = 0.0,
     var discount: Double = 0.0,
     val difficulty: CourseDifficultyLevels,
+    val category: String,
+    val videoLength: Double? = 0.0
 )
 
 enum class CourseDifficultyLevels {

@@ -14,5 +14,7 @@ data class CourseDTO(
     val rating: Double,
     val price: Double,
     val discount: Double,
-    val difficulty: CourseDifficultyLevels
+    val difficulty: CourseDifficultyLevels,
+    val category: String,
+    val videoLength: Double = 0.0
 ) : Serializable

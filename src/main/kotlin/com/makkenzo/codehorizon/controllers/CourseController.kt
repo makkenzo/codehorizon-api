@@ -41,8 +41,9 @@ class CourseController(
         @RequestParam(required = false) title: String?,
         @RequestParam(required = false) description: String?,
         @RequestParam(required = false) minRating: Double?,
+        @RequestParam(required = false) minDuration: Double?,
         @RequestParam(required = false) maxDuration: Double?,
-        @RequestParam(required = false) category: String?,
+        @RequestParam(required = false) category: List<String>?,
         @RequestParam(required = false) difficulty: List<CourseDifficultyLevels>?,
         @RequestParam(required = false) sortBy: String?,
         @RequestParam(defaultValue = "0") page: Int,
@@ -51,7 +52,7 @@ class CourseController(
         val pageable: Pageable = PageRequest.of(page, size)
 
         val courses = courseService.getCourses(
-            title, description, minRating, maxDuration, category, difficulty, sortBy, pageable
+            title, description, minRating, minDuration, maxDuration, category, difficulty, sortBy, pageable
         )
 
         return ResponseEntity.ok(courses)
@@ -107,6 +108,7 @@ class CourseController(
         @RequestParam("description") description: String,
         @RequestParam("price") price: Double,
         @RequestParam("difficultyLevel") difficultyLevel: CourseDifficultyLevels,
+        @RequestParam("category") category: String,
         @Parameter(
             description = "Файл превью для изображения",
             schema = Schema(type = "string", format = "binary")
@@ -130,7 +132,16 @@ class CourseController(
 
 
             val course =
-                courseService.createCourse(title, description, price, authorId, imageUrl, videoUrl, difficultyLevel)
+                courseService.createCourse(
+                    title,
+                    description,
+                    price,
+                    authorId,
+                    category,
+                    imageUrl,
+                    videoUrl,
+                    difficultyLevel
+                )
             ResponseEntity.ok(course)
         } catch (e: AccessDeniedException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to e.message))
