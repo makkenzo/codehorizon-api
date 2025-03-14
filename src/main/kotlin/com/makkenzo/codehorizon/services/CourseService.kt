@@ -89,7 +89,7 @@ class CourseService(
         minRating: Double?,
         maxDuration: Double?,
         category: String?,
-        difficulty: CourseDifficultyLevels?,
+        difficulty: List<CourseDifficultyLevels>?,
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
@@ -99,7 +99,7 @@ class CourseService(
         minRating?.let { criteria.and("rating").gte(it) }
         maxDuration?.let { criteria.and("duration").lte(it) }
         category?.let { criteria.and("category").`is`(it) }
-        difficulty?.let { criteria.and("difficulty").`is`(it) }
+        difficulty?.let { criteria.and("difficulty").`in`(it) }
 
         // Стадия match с фильтрами
         val matchStage = Aggregation.match(criteria)

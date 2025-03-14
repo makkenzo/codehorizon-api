@@ -43,7 +43,7 @@ class CourseController(
         @RequestParam(required = false) minRating: Double?,
         @RequestParam(required = false) maxDuration: Double?,
         @RequestParam(required = false) category: String?,
-        @RequestParam(required = false) difficulty: CourseDifficultyLevels?,
+        @RequestParam(required = false) difficulty: List<CourseDifficultyLevels>?,
         @RequestParam(required = false) sortBy: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") size: Int
