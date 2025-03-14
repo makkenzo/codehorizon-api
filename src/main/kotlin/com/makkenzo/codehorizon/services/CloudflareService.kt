@@ -29,8 +29,8 @@ class CloudflareService(private val minioClient: MinioClient) {
     }
 
     fun validateFile(file: MultipartFile) {
-        val allowedTypes = listOf("image/png", "image/jpeg", "image/webp")
-        val maxSze = 5 * 1024 * 1024 // 5MB
+        val allowedTypes = listOf("image/png", "image/jpeg", "image/webp", "video/mp4")
+        val maxSze = 1024 * 1024 * 1024 // 1024MB
 
         if (file.isEmpty) throw IllegalArgumentException("File is empty")
         if (!allowedTypes.contains(file.contentType)) throw IllegalArgumentException("Invalid file type")
