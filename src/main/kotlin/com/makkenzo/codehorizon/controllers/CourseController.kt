@@ -1,8 +1,10 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.CookieAuth
+import com.makkenzo.codehorizon.dtos.CourseDTO
 import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
+import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
@@ -16,6 +18,8 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -33,8 +37,23 @@ class CourseController(
 ) {
     @GetMapping
     @Operation(summary = "Получить все курсы")
-    fun getAllCourses(): ResponseEntity<List<Course>> {
-        val courses = courseService.getCourses()
+    fun getAllCourses(
+        @RequestParam(required = false) title: String?,
+        @RequestParam(required = false) description: String?,
+        @RequestParam(required = false) minRating: Double?,
+        @RequestParam(required = false) maxDuration: Double?,
+        @RequestParam(required = false) category: String?,
+        @RequestParam(required = false) difficulty: CourseDifficultyLevels?,
+        @RequestParam(required = false) sortBy: String?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") size: Int
+    ): ResponseEntity<PagedResponseDTO<CourseDTO>> {
+        val pageable: Pageable = PageRequest.of(page, size)
+
+        val courses = courseService.getCourses(
+            title, description, minRating, maxDuration, category, difficulty, sortBy, pageable
+        )
+
         return ResponseEntity.ok(courses)
     }
 

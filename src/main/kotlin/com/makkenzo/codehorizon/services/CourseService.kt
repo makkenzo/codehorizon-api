@@ -1,12 +1,18 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.CourseDTO
 import com.makkenzo.codehorizon.dtos.LessonRequestDTO
+import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
@@ -67,14 +73,48 @@ class CourseService(
         return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
     }
 
-    fun getCourses(): List<Course> {
-        return courseRepository.findAll()
+    fun getCourses(
+        title: String?,
+        description: String?,
+        minRating: Double?,
+        maxDuration: Double?,
+        category: String?,
+        difficulty: CourseDifficultyLevels?,
+        sortBy: String?,
+        pageable: Pageable
+    ): PagedResponseDTO<CourseDTO> {
+        val sort = when (sortBy) {
+            "price_asc" -> Sort.by("price").ascending()
+            "price_desc" -> Sort.by("price").descending()
+            "popular" -> Sort.by("rating").descending()
+            else -> Sort.unsorted()
+        }
+
+        val pageRequest = PageRequest.of(pageable.pageNumber, pageable.pageSize, sort)
+
+        val courses: Page<Course> = if (!title.isNullOrEmpty() || !description.isNullOrEmpty()) {
+            courseRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                title ?: "", description ?: "", pageRequest
+            )
+        } else {
+            courseRepository.findAll(pageRequest)
+        }
+
+        return PagedResponseDTO(
+            content = courses.content.map { it.toDto() },
+            pageNumber = courses.number,
+            pageSize = courses.size,
+            totalElements = courses.totalElements,
+            totalPages = courses.totalPages,
+            isLast = courses.isLast
+        )
     }
 
     fun getLessonsByCourseId(courseId: String): List<Lesson> {
         val course = getCourseById(courseId)
         return course.lessons
     }
+
 
     fun getLessonById(courseId: String, lessonId: String): Lesson {
         val course = getCourseById(courseId)

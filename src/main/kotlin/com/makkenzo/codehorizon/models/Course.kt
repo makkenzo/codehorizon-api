@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.models
 
+import com.makkenzo.codehorizon.dtos.CourseDTO
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 
@@ -16,7 +17,22 @@ data class Course(
     var price: Double = 0.0,
     var discount: Double = 0.0,
     val difficulty: CourseDifficultyLevels,
-)
+) {
+    fun toDto(): CourseDTO {
+        return CourseDTO(
+            id = this.id ?: "",
+            title = this.title,
+            description = this.description,
+            imagePreview = this.imagePreview,
+            videoPreview = this.videoPreview,
+            authorId = this.authorId,
+            rating = this.rating,
+            price = this.price,
+            discount = this.discount,
+            difficulty = this.difficulty
+        )
+    }
+}
 
 enum class CourseDifficultyLevels {
     BEGINNER,
