@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.dtos
 
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
+import java.io.Serializable
 
 data class CourseDTO(
     val id: String,
@@ -14,4 +15,4 @@ data class CourseDTO(
     val price: Double,
     val discount: Double,
     val difficulty: CourseDifficultyLevels
-)
+) : Serializable

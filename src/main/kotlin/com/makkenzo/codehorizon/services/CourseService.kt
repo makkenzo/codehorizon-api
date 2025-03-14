@@ -10,6 +10,8 @@ import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.bson.Document
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -28,6 +30,7 @@ class CourseService(
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate
 ) {
+    @CacheEvict(value = ["courses"], allEntries = true)
     fun createCourse(
         title: String,
         description: String,
@@ -79,6 +82,7 @@ class CourseService(
         return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
     }
 
+    @Cacheable("courses")
     fun getCourses(
         title: String?,
         description: String?,
@@ -89,7 +93,6 @@ class CourseService(
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
-        // Собираем критерии фильтрации
         val criteria = Criteria()
         title?.let { criteria.and("title").regex(".*$it.*", "i") }
         description?.let { criteria.and("description").regex(".*$it.*", "i") }
