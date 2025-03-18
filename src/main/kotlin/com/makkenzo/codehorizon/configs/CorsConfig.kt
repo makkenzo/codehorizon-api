@@ -15,10 +15,8 @@ class CorsConfig {
 
         config.allowCredentials = true
         config.allowedOrigins = listOf(
-            "http://marchenzo:3000",
-            "https://codehorizon.makkenzo.com",
-            "http://marchenzo:5000",
-            "http://marchenzo:8080",
+            "https://*.makkenzo.com",
+            "http://marchenzo:*"
         )
         config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("Authorization", "Content-Type")
