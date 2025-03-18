@@ -25,6 +25,7 @@ class SecurityConfig() {
         customAuthenticationEntryPoint: CustomAuthenticationEntryPoint
     ): SecurityFilterChain {
         http.csrf { it.disable() }
+            .cors {}
             .authorizeHttpRequests { requests ->
                 requests
                     .anyRequest().permitAll()

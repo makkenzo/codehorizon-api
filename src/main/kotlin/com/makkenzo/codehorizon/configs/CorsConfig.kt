@@ -14,7 +14,7 @@ class CorsConfig {
         val config = CorsConfiguration()
 
         config.allowCredentials = true
-        config.allowedOrigins = listOf(
+        config.allowedOriginPatterns = listOf(
             "https://*.makkenzo.com",
             "http://marchenzo:*"
         )
