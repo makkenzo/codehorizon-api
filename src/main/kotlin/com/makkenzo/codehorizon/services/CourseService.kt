@@ -145,6 +145,7 @@ class CourseService(
 
         // Создаем список операций агрегации
         val aggregationOperations = mutableListOf<AggregationOperation>()
+
         aggregationOperations.add(matchStage)
         aggregationOperations.add(lookupStage)
         aggregationOperations.add(projectStage)
@@ -153,7 +154,8 @@ class CourseService(
             aggregationOperations.add(Aggregation.sort(sort))
         }
         // Пагинация: пропустить и ограничить
-        aggregationOperations.add(Aggregation.skip((pageable.pageNumber * pageable.pageSize).toLong()))
+        val pageNumber = if (pageable.pageNumber > 0) pageable.pageNumber - 1 else 0
+        aggregationOperations.add(Aggregation.skip((pageNumber * pageable.pageSize).toLong()))
         aggregationOperations.add(Aggregation.limit(pageable.pageSize.toLong()))
 
         val aggregation = Aggregation.newAggregation(aggregationOperations)
