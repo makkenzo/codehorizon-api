@@ -17,7 +17,6 @@ data class User(
 
     val cartId: String? = null,
     val wishlistId: String? = null,
-    val profileId: String? = null,
 
     val accountSettings: AccountSettings? = null,
 )

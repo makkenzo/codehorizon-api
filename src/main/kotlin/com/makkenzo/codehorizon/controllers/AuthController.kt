@@ -128,7 +128,7 @@ class AuthController(
         return ResponseEntity.ok(user)
     }
 
-    @PostMapping("/logout")
+    @DeleteMapping("/session")
     @Operation(summary = "Выход пользователя")
     fun logout(
         @CookieValue("access_token", required = false) accessToken: String?,

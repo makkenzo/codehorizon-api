@@ -63,11 +63,4 @@ class ProfileController(
         profileService.deleteProfile(userId)
         return ResponseEntity.noContent().build()
     }
-
-    @GetMapping("/user/{userId}")
-    @Operation(summary = "Получение профиля по userId")
-    fun getProfileByUserId(@PathVariable userId: String): ResponseEntity<Profile> {
-        val profile = profileService.getProfileByUserId(userId)
-        return ResponseEntity.ok(profile)
-    }
 }

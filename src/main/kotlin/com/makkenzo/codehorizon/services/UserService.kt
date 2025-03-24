@@ -1,7 +1,10 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.ProfileDTO
+import com.makkenzo.codehorizon.dtos.UserProfileDTO
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -14,6 +17,7 @@ class UserService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
     private val profileService: ProfileService,
+    private val profileRepository: ProfileRepository,
 ) {
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
@@ -108,5 +112,29 @@ class UserService(
 
     fun findByLogin(login: String): User? {
         return userRepository.findByUsernameOrEmail(login, login)
+    }
+
+    fun getProfileByUsername(username: String): UserProfileDTO {
+        val user = userRepository.findByUsername(username) ?: throw ResponseStatusException(
+            HttpStatus.NOT_FOUND, "Профиль с таким юзернеймом не найден"
+        )
+
+        val profile = profileRepository.findByUserId(user.id!!)
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
+
+        return UserProfileDTO(
+            id = user.id,
+            username = user.username,
+            email = user.email,
+            isVerified = user.isVerified,
+            profile = ProfileDTO(
+                firstName = profile.firstName,
+                lastName = profile.lastName,
+                avatarUrl = profile.avatarUrl,
+                bio = profile.bio,
+                location = profile.location,
+                website = profile.website
+            )
+        )
     }
 }

@@ -18,6 +18,7 @@ import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.aggregation.Aggregation
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators
 import org.springframework.data.mongodb.core.aggregation.ConvertOperators.ToString
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.security.access.AccessDeniedException
@@ -116,6 +117,12 @@ class CourseService(
         val matchStage = Aggregation.match(finalCriteria)
         // Стадия lookup для объединения с коллекцией профилей
         val lookupStage = Aggregation.lookup("profiles", "authorId", "userId", "authorProfile")
+        val addFieldsStage = Aggregation.addFields()
+            .addField("authorIdObj")
+            .withValue(ConvertOperators.valueOf("authorId").convertToObjectId())
+            .build()
+        val lookupUsersStage = Aggregation.lookup("users", "authorIdObj", "_id", "authorUser")
+
         // Стадия project: исключаем lessons и выбираем нужные поля, а также извлекаем имя автора из объединённого массива
         val projectStage = Aggregation.project(
             "title",
@@ -132,6 +139,7 @@ class CourseService(
         )
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.firstName").elementAt(0)).`as`("authorFirstName")
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.lastName").elementAt(0)).`as`("authorLastName")
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorUser.username").elementAt(0)).`as`("authorUsername")
             .and(ToString.toString("_id")).`as`("id")
 
 
@@ -148,6 +156,8 @@ class CourseService(
 
         aggregationOperations.add(matchStage)
         aggregationOperations.add(lookupStage)
+        aggregationOperations.add(addFieldsStage)
+        aggregationOperations.add(lookupUsersStage)
         aggregationOperations.add(projectStage)
         // Добавляем стадию сортировки только если она не пустая
         if (sort.isSorted) {
@@ -167,6 +177,7 @@ class CourseService(
             val authorLastName = doc.getString("authorLastName") ?: ""
             val authorName =
                 if (authorFirstName.isBlank() && authorLastName.isBlank()) "Неизвестный автор" else "$authorFirstName $authorLastName".trim()
+            val authorUsername = doc.getString("authorUsername") ?: "Неизвестный пользователь"
 
             CourseDTO(
                 id = doc.get("_id").toString(),
@@ -181,6 +192,7 @@ class CourseService(
                 difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
                     ?: CourseDifficultyLevels.BEGINNER,
                 authorName = authorName,
+                authorUsername = authorUsername,
                 category = doc.getString("category") ?: "Без категории",
                 videoLength = doc.getDouble("videoLength") ?: 0.0
             )
