@@ -1,7 +1,5 @@
 package com.makkenzo.codehorizon.utils
 
-import org.springframework.data.repository.CrudRepository
-
 object SlugUtils {
     fun generateSlug(title: String): String {
         return title.lowercase()
@@ -9,9 +7,8 @@ object SlugUtils {
             .trim('-')
     }
 
-    fun <T> generateUniqueSlug(
+    fun generateUniqueSlug(
         input: String,
-        repository: CrudRepository<T, String>,
         existsBySlug: (String) -> Boolean
     ): String {
         val slug = generateSlug(input)

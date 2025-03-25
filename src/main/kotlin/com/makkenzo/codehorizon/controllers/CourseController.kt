@@ -1,10 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.annotations.CookieAuth
-import com.makkenzo.codehorizon.dtos.CourseDTO
-import com.makkenzo.codehorizon.dtos.CreateCourseRequestDTO
-import com.makkenzo.codehorizon.dtos.LessonRequestDTO
-import com.makkenzo.codehorizon.dtos.PagedResponseDTO
+import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
@@ -58,11 +55,11 @@ class CourseController(
         return ResponseEntity.ok(courses)
     }
 
-    @GetMapping("/{courseId}")
-    @Operation(summary = "Получить курс по ID")
-    fun getCourseById(@PathVariable courseId: String): ResponseEntity<Course> {
+    @GetMapping("/{slug}")
+    @Operation(summary = "Получить курс по slug")
+    fun getCourseById(@PathVariable slug: String): ResponseEntity<CourseWithoutContentDTO> {
         return try {
-            val course = courseService.getCourseById(courseId)
+            val course = courseService.getCourseBySlug(slug)
             ResponseEntity.ok(course)
         } catch (e: NoSuchElementException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
@@ -129,7 +126,7 @@ class CourseController(
 
             val imageUrl = imageFile?.let { cloudflareService.uploadFileToR2(it, "course_images") }
             val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
-            
+
             val course =
                 courseService.createCourse(
                     title,

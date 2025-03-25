@@ -1,8 +1,6 @@
 package com.makkenzo.codehorizon.services
 
-import com.makkenzo.codehorizon.dtos.CourseDTO
-import com.makkenzo.codehorizon.dtos.LessonRequestDTO
-import com.makkenzo.codehorizon.dtos.PagedResponseDTO
+import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
@@ -49,7 +47,7 @@ class CourseService(
             throw AccessDeniedException("Only admins can create courses")
         }
 
-        val slug = SlugUtils.generateUniqueSlug(title, courseRepository) { courseRepository.existsBySlug(it) }
+        val slug = SlugUtils.generateUniqueSlug(title) { courseRepository.existsBySlug(it) }
 
         val course = Course(
             title = title,
@@ -76,7 +74,8 @@ class CourseService(
             throw AccessDeniedException("Only admins can add lessons")
         }
         val course = courseRepository.findById(courseId).orElseThrow { IllegalArgumentException("Course not found") }
-        val newLesson = lessonDto.toLesson()
+        val slug = SlugUtils.generateUniqueSlug(lessonDto.title) { slug -> courseRepository.existsLessonWithSlug(slug) }
+        val newLesson = lessonDto.toLesson().copy(slug = slug)
         val updatedCourse = course.copy(lessons = (course.lessons + newLesson).toMutableList())
         return courseRepository.save(updatedCourse)
     }
@@ -87,6 +86,30 @@ class CourseService(
 
     fun getCourseById(courseId: String): Course {
         return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
+    }
+
+    fun getCourseBySlug(slug: String): CourseWithoutContentDTO {
+        val course = courseRepository.findBySlug(slug) ?: throw NotFoundException("Course not found with slug: $slug")
+        return CourseWithoutContentDTO(
+            slug = course.slug,
+            category = course.category,
+            title = course.title,
+            description = course.description,
+            imagePreview = course.imagePreview,
+            videoPreview = course.videoPreview,
+            rating = course.rating,
+            difficulty = course.difficulty,
+            videoLength = course.videoLength,
+            price = course.price,
+            authorId = course.authorId,
+            discount = course.discount,
+            lessons = course.lessons.map {
+                LessonWithoutContent(
+                    slug = it.slug ?: "",
+                    title = it.title
+                )
+            }
+        )
     }
 
     @Cacheable("courses")
