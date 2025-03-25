@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document
 data class Course(
     @Id val id: String? = null,
     var title: String,
+    var slug: String,
     var description: String? = null,
     val imagePreview: String? = null,
     val videoPreview: String? = null,
@@ -16,7 +17,7 @@ data class Course(
     var price: Double = 0.0,
     var discount: Double = 0.0,
     val difficulty: CourseDifficultyLevels,
-    val category: String,
+    val category: String? = null,
     val videoLength: Double? = 0.0
 )
 

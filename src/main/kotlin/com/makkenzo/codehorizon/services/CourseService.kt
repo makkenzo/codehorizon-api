@@ -9,6 +9,7 @@ import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import com.makkenzo.codehorizon.utils.SlugUtils
 import org.bson.Document
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
@@ -48,8 +49,11 @@ class CourseService(
             throw AccessDeniedException("Only admins can create courses")
         }
 
+        val slug = SlugUtils.generateUniqueSlug(title, courseRepository) { courseRepository.existsBySlug(it) }
+
         val course = Course(
             title = title,
+            slug = slug,
             description = description,
             authorId = authorId,
             price = price,
@@ -126,6 +130,7 @@ class CourseService(
         // Стадия project: исключаем lessons и выбираем нужные поля, а также извлекаем имя автора из объединённого массива
         val projectStage = Aggregation.project(
             "title",
+            "slug",
             "description",
             "imagePreview",
             "videoPreview",
@@ -181,6 +186,7 @@ class CourseService(
 
             CourseDTO(
                 id = doc.get("_id").toString(),
+                slug = doc.getString("slug"),
                 title = doc.getString("title") ?: "",
                 description = doc.getString("description") ?: "",
                 imagePreview = doc.getString("imagePreview"),

@@ -6,6 +6,7 @@ import java.io.Serializable
 data class CourseDTO(
     val id: String,
     val title: String,
+    val slug: String,
     val description: String?,
     val imagePreview: String?,
     val videoPreview: String?,

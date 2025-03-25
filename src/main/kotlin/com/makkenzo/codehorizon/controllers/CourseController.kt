@@ -129,8 +129,7 @@ class CourseController(
 
             val imageUrl = imageFile?.let { cloudflareService.uploadFileToR2(it, "course_images") }
             val videoUrl = videoFile?.let { cloudflareService.uploadFileToR2(it, "course_videos") }
-
-
+            
             val course =
                 courseService.createCourse(
                     title,

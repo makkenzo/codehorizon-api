@@ -11,4 +11,6 @@ interface CourseRepository : MongoRepository<Course, String> {
         title: String,
         description: String, pageable: Pageable
     ): Page<Course>
+
+    fun existsBySlug(slug: String): Boolean
 }
