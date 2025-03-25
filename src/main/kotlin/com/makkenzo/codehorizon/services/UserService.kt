@@ -131,6 +131,7 @@ class UserService(
                 firstName = profile.firstName,
                 lastName = profile.lastName,
                 avatarUrl = profile.avatarUrl,
+                avatarColor = profile.avatarColor,
                 bio = profile.bio,
                 location = profile.location,
                 website = profile.website
