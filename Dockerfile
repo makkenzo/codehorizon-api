@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY . .
 RUN ./gradlew clean build -x test
+ENV SPRING_PROFILES_ACTIVE=prod
 
 EXPOSE 8080
 
