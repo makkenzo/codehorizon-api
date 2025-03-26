@@ -7,7 +7,10 @@ import com.stripe.net.Webhook
 import org.springframework.stereotype.Service
 
 @Service
-class StripeService(private val purchaseService: PurchaseService) {
+class StripeService(
+    private val purchaseService: PurchaseService,
+    private val courseProgressService: CourseProgressService
+) {
     private val stripeSecretKey = System.getenv("STRIPE_SECRET_KEY")
         ?: throw RuntimeException("Missing STRIPE_SECRET_KEY")
 
@@ -32,6 +35,7 @@ class StripeService(private val purchaseService: PurchaseService) {
 
                 if (userId != null && courseId != null) {
                     purchaseService.createPurchase(userId, courseId, session.id)
+                    courseProgressService.addCourseProgress(userId, courseId)
                 }
             }
 
