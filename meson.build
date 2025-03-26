@@ -1,0 +1,6 @@
+run_target('up', command: ['docker', 'compose', 'up', '-d', '--build'])
+run_target('up-local', command: ['docker', 'compose', '-f', 'docker-compose.local.yml', 'up', '-d'])
+run_target('down', command: ['docker', 'compose', 'down'])
+run_target('restart', command: ['docker', 'compose', 'down', '&&', 'docker', 'compose', 'up', '-d', '--build'])
+run_target('logs', command: ['docker', 'compose', 'logs', '-f'])
+run_target('ps', command: ['docker', 'compose', 'ps'])
