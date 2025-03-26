@@ -1,27 +1,27 @@
 package com.makkenzo.codehorizon.configs
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.web.cors.CorsConfiguration
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource
-import org.springframework.web.filter.CorsFilter
+import org.springframework.web.servlet.config.annotation.CorsRegistry
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 @Configuration
 class CorsConfig {
+    @Value("\${cors.originPatterns:default}")
+    private val corsOriginPatterns: String = ""
+
+
     @Bean
-    fun corsFilter(): CorsFilter {
-        val source = UrlBasedCorsConfigurationSource()
-        val config = CorsConfiguration()
-
-        config.allowCredentials = true
-        config.allowedOriginPatterns = listOf(
-            "https://*.makkenzo.com",
-            "http://marchenzo:*"
-        )
-        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
-        config.allowedHeaders = listOf("Authorization", "Content-Type")
-
-        source.registerCorsConfiguration("/**", config)
-        return CorsFilter(source)
+    fun addCorsConfig(): WebMvcConfigurer {
+        return object : WebMvcConfigurer {
+            override fun addCorsMappings(registry: CorsRegistry) {
+                val allowedOrigins = corsOriginPatterns.split(",").toTypedArray()
+                registry.addMapping("/**")
+                    .allowedMethods("*")
+                    .allowedOriginPatterns(*allowedOrigins)
+                    .allowCredentials(true)
+            }
+        }
     }
 }

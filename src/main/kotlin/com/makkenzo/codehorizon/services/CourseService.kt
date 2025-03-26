@@ -7,8 +7,11 @@ import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import com.makkenzo.codehorizon.utils.MediaUtils
 import com.makkenzo.codehorizon.utils.SlugUtils
+import com.mongodb.client.model.Filters
 import org.bson.Document
+import org.bson.types.ObjectId
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Pageable
@@ -90,6 +93,22 @@ class CourseService(
 
     fun getCourseBySlug(slug: String): CourseWithoutContentDTO {
         val course = courseRepository.findBySlug(slug) ?: throw NotFoundException("Course not found with slug: $slug")
+
+        val profileDoc = mongoTemplate.getCollection("profiles")
+            .find(Filters.eq("userId", course.authorId))
+            .firstOrNull()
+
+        val firstName = profileDoc?.getString("firstName") ?: ""
+        val lastName = profileDoc?.getString("lastName") ?: ""
+        val authorName =
+            if (firstName.isBlank() && lastName.isBlank()) "Неизвестный автор" else "$firstName $lastName".trim()
+
+        val userDoc = mongoTemplate.getCollection("users")
+            .find(Filters.eq("_id", ObjectId(course.authorId)))
+            .firstOrNull()
+
+        val authorUsername = userDoc?.getString("username") ?: "Неизвестный пользователь"
+
         return CourseWithoutContentDTO(
             slug = course.slug,
             category = course.category,
@@ -101,7 +120,8 @@ class CourseService(
             difficulty = course.difficulty,
             videoLength = course.videoLength,
             price = course.price,
-            authorId = course.authorId,
+            authorName = authorName,
+            authorUsername = authorUsername,
             discount = course.discount,
             lessons = course.lessons.map {
                 LessonWithoutContent(
@@ -111,6 +131,7 @@ class CourseService(
             }
         )
     }
+
 
     @Cacheable("courses")
     fun getCourses(
@@ -299,5 +320,27 @@ class CourseService(
             course.lessons.find { it.id == lessonId } ?: throw NotFoundException("Lesson not found with id: $lessonId")
         course.lessons.remove(lesson)
         return courseRepository.save(course)
+    }
+
+    fun updateAllCoursesVideoLength() {
+        val courses = courseRepository.findAll()
+
+        for (course in courses) {
+            val totalLength = calculateTotalVideoLength(course)
+            val updatedCourse = course.copy(videoLength = totalLength)
+
+            courseRepository.save(updatedCourse)
+            println("✅ Обновлён курс '${course.title}' — общая длина видео: ${totalLength}s")
+        }
+    }
+
+    fun calculateTotalVideoLength(course: Course): Double {
+        val videoUrls = mutableListOf<String>()
+
+        course.videoPreview?.let { videoUrls.add(it) }
+
+        videoUrls.addAll(course.lessons.mapNotNull { it.mainAttachment })
+
+        return videoUrls.sumOf { MediaUtils.getVideoDuration(it) }
     }
 }
