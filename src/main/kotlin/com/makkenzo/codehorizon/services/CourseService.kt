@@ -33,6 +33,71 @@ class CourseService(
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate
 ) {
+    fun findByIds(courseIds: List<String>): List<CourseDTO> {
+        if (courseIds.isEmpty()) return emptyList()
+
+        val matchStage = Aggregation.match(Criteria.where("_id").`in`(courseIds))
+
+        val lookupStage = Aggregation.lookup("profiles", "authorId", "userId", "authorProfile")
+        val addFieldsStage = Aggregation.addFields()
+            .addField("authorIdObj")
+            .withValue(ConvertOperators.valueOf("authorId").convertToObjectId())
+            .build()
+        val lookupUsersStage = Aggregation.lookup("users", "authorIdObj", "_id", "authorUser")
+
+        val projectStage = Aggregation.project(
+            "title",
+            "slug",
+            "description",
+            "imagePreview",
+            "videoPreview",
+            "authorId",
+            "rating",
+            "price",
+            "discount",
+            "difficulty",
+            "category",
+            "videoLength",
+        )
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.firstName").elementAt(0)).`as`("authorFirstName")
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.lastName").elementAt(0)).`as`("authorLastName")
+            .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorUser.username").elementAt(0)).`as`("authorUsername")
+            .and(ToString.toString("_id")).`as`("id")
+
+        val aggregation =
+            Aggregation.newAggregation(matchStage, lookupStage, addFieldsStage, lookupUsersStage, projectStage)
+
+        val aggregationResult = mongoTemplate.aggregate(aggregation, "courses", Document::class.java)
+
+        return aggregationResult.mappedResults.map { doc ->
+            val authorFirstName = doc.getString("authorFirstName") ?: ""
+            val authorLastName = doc.getString("authorLastName") ?: ""
+            val authorName = if (authorFirstName.isBlank() && authorLastName.isBlank()) "Неизвестный автор"
+            else "$authorFirstName $authorLastName".trim()
+            val authorUsername = doc.getString("authorUsername") ?: "Неизвестный пользователь"
+
+            CourseDTO(
+                id = doc.get("_id").toString(),
+                slug = doc.getString("slug"),
+                title = doc.getString("title") ?: "",
+                description = doc.getString("description") ?: "",
+                imagePreview = doc.getString("imagePreview"),
+                videoPreview = doc.getString("videoPreview"),
+                authorId = doc.getString("authorId") ?: "",
+                rating = doc.getDouble("rating") ?: 0.0,
+                price = doc.getDouble("price") ?: 0.0,
+                discount = doc.getDouble("discount") ?: 0.0,
+                difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
+                    ?: CourseDifficultyLevels.BEGINNER,
+                authorName = authorName,
+                authorUsername = authorUsername,
+                category = doc.getString("category") ?: "Без категории",
+                videoLength = doc.getDouble("videoLength") ?: 0.0
+            )
+        }
+    }
+
+
     @CacheEvict(value = ["courses"], allEntries = true)
     fun createCourse(
         title: String,
