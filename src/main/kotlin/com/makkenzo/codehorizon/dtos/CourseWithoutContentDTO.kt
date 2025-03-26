@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.dtos
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 
 data class CourseWithoutContentDTO(
+    val id: String,
     val title: String,
     val slug: String,
     val description: String?,

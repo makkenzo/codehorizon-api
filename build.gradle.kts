@@ -45,6 +45,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.apache.commons:commons-imaging:1.0-alpha3")
+    implementation("com.stripe:stripe-java:28.5.0-beta.1")
 }
 
 kotlin {

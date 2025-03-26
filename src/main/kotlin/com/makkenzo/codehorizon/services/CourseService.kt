@@ -110,6 +110,7 @@ class CourseService(
         val authorUsername = userDoc?.getString("username") ?: "Неизвестный пользователь"
 
         return CourseWithoutContentDTO(
+            id = course.id.toString(),
             slug = course.slug,
             category = course.category,
             title = course.title,
