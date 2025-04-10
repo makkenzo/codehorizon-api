@@ -42,4 +42,8 @@ class WishlistService(
             isLast = wishlistItems.isLast
         )
     }
+
+    fun isCourseInWishlist(userId: String, courseId: String): Boolean {
+        return wishlistRepository.existsByUserIdAndCourseId(userId, courseId)
+    }
 }

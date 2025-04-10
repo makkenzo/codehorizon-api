@@ -7,6 +7,7 @@ import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.services.WishlistService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.data.domain.PageRequest
@@ -22,7 +23,7 @@ class WishlistController(
     private val jwtUtils: JwtUtils
 ) {
     @PostMapping("/{courseId}")
-    @Operation(summary = "")
+    @Operation(summary = "Добавление курса в желаемое", security = [SecurityRequirement(name = "bearerAuth")])
     @CookieAuth
     fun addToWishlist(@PathVariable courseId: String, request: HttpServletRequest): ResponseEntity<MessageResponseDTO> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
@@ -34,6 +35,8 @@ class WishlistController(
     }
 
     @DeleteMapping("/{courseId}")
+    @Operation(summary = "Удаление курса из желаемого", security = [SecurityRequirement(name = "bearerAuth")])
+    @CookieAuth
     fun removeFromWishlist(
         @PathVariable courseId: String,
         request: HttpServletRequest
@@ -47,6 +50,8 @@ class WishlistController(
     }
 
     @GetMapping
+    @Operation(summary = "Получение желаемого", security = [SecurityRequirement(name = "bearerAuth")])
+    @CookieAuth
     fun getWishlist(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int, request: HttpServletRequest
@@ -60,5 +65,15 @@ class WishlistController(
         )
 
         return wishlistService.getWishlist(userId, pageable)
+    }
+
+    @GetMapping("/status")
+    @Operation(summary = "Проверка наличия курса в желаемом", security = [SecurityRequirement(name = "bearerAuth")])
+    @CookieAuth
+    fun isCourseInWishlist(@RequestParam courseId: String, request: HttpServletRequest): ResponseEntity<Boolean> {
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
+        return ResponseEntity.ok(wishlistService.isCourseInWishlist(userId, courseId))
     }
 }
