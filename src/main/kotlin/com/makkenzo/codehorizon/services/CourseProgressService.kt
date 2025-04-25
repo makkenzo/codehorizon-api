@@ -47,4 +47,9 @@ class CourseProgressService(
             totalPages = progressPage.totalPages
         )
     }
+
+    fun getUserCourseProgress(userId: String, courseId: String): Double? {
+        val progress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
+        return progress?.progress
+    }
 }

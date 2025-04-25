@@ -54,4 +54,14 @@ class UserController(
 
         return ResponseEntity.ok(courses)
     }
+
+    @GetMapping("/me/courses/{courseId}/access")
+    @Operation(summary = "Проверка на доступ к курсу", security = [SecurityRequirement(name = "bearerAuth")])
+    @CookieAuth
+    fun isCourseAccessible(@PathVariable courseId: String, request: HttpServletRequest): ResponseEntity<Boolean> {
+        val token = request.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
+        return ResponseEntity.ok(courseProgressService.getUserCourseProgress(userId, courseId) != null)
+    }
 }
