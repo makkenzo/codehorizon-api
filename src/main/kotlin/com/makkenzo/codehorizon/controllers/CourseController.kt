@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
@@ -99,7 +98,6 @@ class CourseController(
 
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Operation(summary = "Создание нового курса", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun createCourse(
         @RequestParam("title") title: String,
         @RequestParam("description") description: String,
@@ -149,7 +147,6 @@ class CourseController(
 
     @PostMapping("/{courseId}/lessons")
     @Operation(summary = "Добавить лекцию в курс", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun addLesson(
         @PathVariable courseId: String,
         @RequestBody lesson: LessonRequestDTO,
@@ -171,7 +168,6 @@ class CourseController(
 
     @PutMapping("/{courseId}")
     @Operation(summary = "Обновить курс", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun updateCourse(
         @PathVariable courseId: String,
         @RequestBody requestBody: CreateCourseRequestDTO,
@@ -201,7 +197,6 @@ class CourseController(
 
     @PutMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Обновить лекцию в курсе", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun updateLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
@@ -226,7 +221,6 @@ class CourseController(
 
     @DeleteMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Удалить лекцию из курса", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun deleteLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,

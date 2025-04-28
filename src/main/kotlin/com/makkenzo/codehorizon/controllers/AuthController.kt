@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.configs.CookieConfig
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.MailActionEnum
@@ -119,7 +118,6 @@ class AuthController(
 
     @GetMapping("/me")
     @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun getMe(request: HttpServletRequest): ResponseEntity<User> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")

@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.CheckoutRequestDTO
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.services.PaymentService
@@ -22,7 +21,6 @@ class PaymentController(
 ) {
     @PostMapping("/checkout")
     @Operation(summary = "Создает Checkout Session для Stripe", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun createCheckoutSession(@RequestBody request: CheckoutRequestDTO): ResponseEntity<Map<String, String>> {
         return try {
             val sessionId = paymentService.createCheckoutSession(request.courseId, request.userId, request.coupon)

@@ -60,7 +60,6 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
                 return false
             }
             Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token)
-            logger.info("Valid token")
             true
         } catch (e: SignatureException) {
             logger.warn("Invalid token signature: ${e.message}")

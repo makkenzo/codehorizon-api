@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.services.CloudflareService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -21,7 +20,6 @@ import org.springframework.web.multipart.MultipartFile
 class S3Controller(private val cloudflareService: CloudflareService) {
     @PostMapping("/upload", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Operation(summary = "Загрузка файла", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun uploadToS3(
         @Parameter(
             description = "Директория хранения",

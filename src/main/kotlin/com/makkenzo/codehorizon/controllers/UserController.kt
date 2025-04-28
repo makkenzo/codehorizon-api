@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.dtos.UserProfileDTO
@@ -34,7 +33,6 @@ class UserController(
 
     @GetMapping("/me/courses")
     @Operation(summary = "Получить все курсы пользователя", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun getAllMyCourses(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int,
@@ -57,7 +55,6 @@ class UserController(
 
     @GetMapping("/me/courses/{courseId}/access")
     @Operation(summary = "Проверка на доступ к курсу", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun isCourseAccessible(@PathVariable courseId: String, request: HttpServletRequest): ResponseEntity<Boolean> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")

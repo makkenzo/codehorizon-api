@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.CourseDTO
 import com.makkenzo.codehorizon.dtos.MessageResponseDTO
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
@@ -24,7 +23,6 @@ class WishlistController(
 ) {
     @PostMapping("/{courseId}")
     @Operation(summary = "Добавление курса в желаемое", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun addToWishlist(@PathVariable courseId: String, request: HttpServletRequest): ResponseEntity<MessageResponseDTO> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
@@ -36,7 +34,6 @@ class WishlistController(
 
     @DeleteMapping("/{courseId}")
     @Operation(summary = "Удаление курса из желаемого", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun removeFromWishlist(
         @PathVariable courseId: String,
         request: HttpServletRequest
@@ -51,7 +48,6 @@ class WishlistController(
 
     @GetMapping
     @Operation(summary = "Получение желаемого", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun getWishlist(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int, request: HttpServletRequest
@@ -69,7 +65,6 @@ class WishlistController(
 
     @GetMapping("/status")
     @Operation(summary = "Проверка наличия курса в желаемом", security = [SecurityRequirement(name = "bearerAuth")])
-    @CookieAuth
     fun isCourseInWishlist(@RequestParam courseId: String, request: HttpServletRequest): ResponseEntity<Boolean> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")

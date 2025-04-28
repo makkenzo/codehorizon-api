@@ -1,6 +1,5 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.annotations.CookieAuth
 import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.services.ProfileService
@@ -24,7 +23,6 @@ class ProfileController(
         summary = "Получение профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @CookieAuth
     fun getProfile(request: HttpServletRequest): ResponseEntity<Profile> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
@@ -38,7 +36,6 @@ class ProfileController(
         summary = "Обновление профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @CookieAuth
     fun updateProfile(
         @RequestBody profile: UpdateProfileDTO,
         request: HttpServletRequest
@@ -55,7 +52,6 @@ class ProfileController(
         summary = "Удаление профиля текущего пользователя",
         security = [SecurityRequirement(name = "bearerAuth")]
     )
-    @CookieAuth
     fun deleteProfile(request: HttpServletRequest): ResponseEntity<Void> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
