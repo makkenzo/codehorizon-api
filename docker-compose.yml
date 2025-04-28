@@ -13,7 +13,6 @@ services:
       - redis
     networks:
       - codehorizon_net
-      - monitoring_net
 
   redis:
     image: redis:latest
@@ -41,7 +40,6 @@ services:
       - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:
       - codehorizon_net
-      - monitoring_net
 
 volumes:
   prometheus_data:
