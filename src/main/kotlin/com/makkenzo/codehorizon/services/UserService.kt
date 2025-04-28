@@ -1,11 +1,11 @@
 package com.makkenzo.codehorizon.services
 
-import com.makkenzo.codehorizon.dtos.ProfileDTO
-import com.makkenzo.codehorizon.dtos.UserProfileDTO
+import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -19,6 +19,50 @@ class UserService(
     private val profileService: ProfileService,
     private val profileRepository: ProfileRepository,
 ) {
+    fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
+        val userPage = userRepository.findAll(pageable)
+        val userDTOs = userPage.content.map { user ->
+            AdminUserDTO(
+                id = user.id!!,
+                username = user.username,
+                email = user.email,
+                isVerified = user.isVerified,
+                roles = user.roles
+            )
+        }
+        return PagedResponseDTO(
+            content = userDTOs,
+            pageNumber = userPage.number,
+            pageSize = userPage.size,
+            totalElements = userPage.totalElements,
+            totalPages = userPage.totalPages,
+            isLast = userPage.isLast
+        )
+    }
+
+    fun adminUpdateUser(userId: String, request: AdminUpdateUserRequestDTO): AdminUserDTO {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
+
+        val updatedUser = user.copy(
+            roles = request.roles?.map { role ->
+                if (role.startsWith("ROLE_")) role else "ROLE_$role"
+            }?.distinct()
+                ?: user.roles,
+            isVerified = request.isVerified ?: user.isVerified
+        )
+
+        val savedUser = userRepository.save(updatedUser)
+
+        return AdminUserDTO(
+            id = savedUser.id!!,
+            username = savedUser.username,
+            email = savedUser.email,
+            isVerified = savedUser.isVerified,
+            roles = savedUser.roles
+        )
+    }
+
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
         if (userRepository.findByEmail(email) != null) {
             throw IllegalArgumentException("Email already exists")

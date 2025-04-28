@@ -1,13 +1,15 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.dtos.AdminUpdateUserRequestDTO
+import com.makkenzo.codehorizon.dtos.AdminUserDTO
+import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.services.UserService
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
-import org.springframework.data.web.PageableDefault
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
@@ -20,30 +22,40 @@ import org.springframework.web.bind.annotation.*
 class AdminUserController(private val userService: UserService) {
     @GetMapping
     @Operation(summary = "Получить список пользователей (Admin)")
-    fun getAllUsers(@PageableDefault(size = 20, page = 0) pageable: Pageable): ResponseEntity<Page<User>> {
-        println("Admin requested all users with pageable: $pageable")
-        return ResponseEntity.ok(Page.empty(pageable))
+    fun getAllUsers(
+        @RequestParam(defaultValue = "1") @Parameter(description = "Номер страницы (начиная с 1)") page: Int,
+        @RequestParam(defaultValue = "20") @Parameter(description = "Количество элементов на странице") size: Int
+    ): ResponseEntity<PagedResponseDTO<AdminUserDTO>> {
+        val pageIndex = if (page > 0) page - 1 else 0
+        val pageable: Pageable = PageRequest.of(pageIndex, size)
+
+        val userPage = userService.findAllUsersAdmin(pageable)
+        return ResponseEntity.ok(userPage)
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Получить пользователя по ID (Admin)")
-    fun getUserById(@PathVariable id: String): ResponseEntity<User> {
+    fun getUserById(@PathVariable id: String): ResponseEntity<AdminUserDTO> {
         val user = userService.getUserById(id)
-        return ResponseEntity.ok(user)
-    }
 
-    // TODO: Добавить DTO для обновления пользователя админом
-    data class AdminUpdateUserRequest(
-        val roles: List<String>?,
-        val isVerified: Boolean?
-        // Другие поля, которые может менять админ
-    )
+        val userDTO = AdminUserDTO(
+            id = user.id!!,
+            username = user.username,
+            email = user.email,
+            isVerified = user.isVerified,
+            roles = user.roles
+        )
+
+        return ResponseEntity.ok(userDTO)
+    }
 
     @PutMapping("/{id}")
     @Operation(summary = "Обновить пользователя (Admin)")
-    fun updateUser(@PathVariable id: String, @RequestBody request: AdminUpdateUserRequest): ResponseEntity<User> {
-        println("Admin trying to update user $id with data: $request")
-        val user = userService.getUserById(id)
-        return ResponseEntity.ok(user)
+    fun updateUser(
+        @PathVariable id: String,
+        @RequestBody request: AdminUpdateUserRequestDTO
+    ): ResponseEntity<AdminUserDTO> {
+        val updatedUserDTO = userService.adminUpdateUser(id, request)
+        return ResponseEntity.ok(updatedUserDTO)
     }
 }
