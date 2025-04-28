@@ -14,6 +14,7 @@ import org.bson.Document
 import org.bson.types.ObjectId
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -23,8 +24,12 @@ import org.springframework.data.mongodb.core.aggregation.ArrayOperators
 import org.springframework.data.mongodb.core.aggregation.ConvertOperators
 import org.springframework.data.mongodb.core.aggregation.ConvertOperators.ToString
 import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
+import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
+import java.util.*
 
 @Service
 class CourseService(
@@ -33,6 +38,233 @@ class CourseService(
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate
 ) {
+    fun findAllCoursesAdmin(pageable: Pageable, titleSearch: String?): PagedResponseDTO<AdminCourseListItemDTO> {
+        val criteria = Criteria()
+        titleSearch?.let {
+            criteria.and("title").regex(it, "i")
+        }
+
+        val query = Query(criteria).with(pageable)
+        val totalElements = mongoTemplate.count(Query(criteria), Course::class.java)
+        val courses = mongoTemplate.find(query, Course::class.java)
+
+        val authorIds = courses.map { it.authorId }.distinct()
+        val authors = userRepository.findAllById(authorIds).associateBy { it.id }
+
+        val courseDTOs = courses.map { course ->
+            val author = authors[course.authorId]
+            AdminCourseListItemDTO(
+                id = course.id!!,
+                title = course.title,
+                slug = course.slug,
+                authorUsername = author?.username ?: "N/A",
+                price = course.price,
+                discount = course.discount,
+                difficulty = course.difficulty,
+                category = course.category,
+                lessonCount = course.lessons.size
+            )
+        }
+
+        val page = PageImpl(courseDTOs, pageable, totalElements)
+
+        return PagedResponseDTO(
+            content = page.content,
+            pageNumber = page.number,
+            pageSize = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            isLast = page.isLast
+        )
+    }
+
+    fun getCourseDetailsAdmin(courseId: String): AdminCourseDetailDTO {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        val author = userRepository.findById(course.authorId)
+            .orElse(null)
+
+        return AdminCourseDetailDTO(
+            id = course.id!!,
+            title = course.title,
+            slug = course.slug,
+            description = course.description,
+            imagePreview = course.imagePreview,
+            videoPreview = course.videoPreview,
+            authorId = course.authorId,
+            authorUsername = author?.username ?: "N/A",
+            price = course.price,
+            discount = course.discount,
+            difficulty = course.difficulty,
+            category = course.category,
+            videoLength = course.videoLength,
+            lessons = course.lessons
+        )
+    }
+
+    @CacheEvict(value = ["courses"], allEntries = true)
+    fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
+        val author = userRepository.findById(request.authorId)
+            .orElseThrow { ResponseStatusException(HttpStatus.BAD_REQUEST, "Автор с ID ${request.authorId} не найден") }
+
+        val slug = SlugUtils.generateUniqueSlug(request.title) { courseRepository.existsBySlug(it) }
+
+        val newCourse = Course(
+            title = request.title,
+            slug = slug,
+            description = request.description,
+            price = request.price,
+            discount = request.discount ?: 0.0,
+            authorId = request.authorId,
+            difficulty = request.difficulty,
+            category = request.category,
+            imagePreview = request.imagePreview,
+            videoPreview = request.videoPreview,
+            lessons = mutableListOf()
+        )
+
+        val savedCourse = courseRepository.save(newCourse)
+
+        author.createdCourseIds.add(savedCourse.id!!)
+        userRepository.save(author)
+
+        return getCourseDetailsAdmin(savedCourse.id)
+    }
+
+    @CacheEvict(value = ["courses"], allEntries = true)
+    fun updateCourseAdmin(courseId: String, request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        if (course.authorId != request.authorId) {
+            if (!userRepository.existsById(request.authorId)) {
+                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Новый автор с ID ${request.authorId} не найден")
+            }
+            // TODO: Подумать, нужно ли удалять courseId у старого автора?
+        }
+
+        val newSlug = if (course.title != request.title) {
+            SlugUtils.generateUniqueSlug(request.title) { newSlug ->
+                newSlug != course.slug && courseRepository.existsBySlug(newSlug)
+            }
+        } else {
+            course.slug
+        }
+
+        val updatedCourse = course.copy(
+            title = request.title,
+            slug = newSlug,
+            description = request.description,
+            price = request.price,
+            discount = request.discount ?: course.discount,
+            difficulty = request.difficulty,
+            category = request.category,
+            authorId = request.authorId,
+            imagePreview = request.imagePreview,
+            videoPreview = request.videoPreview
+        )
+
+        val savedCourse = courseRepository.save(updatedCourse)
+        return getCourseDetailsAdmin(savedCourse.id!!)
+    }
+
+    @CacheEvict(value = ["courses"], allEntries = true)
+    fun deleteCourseAdmin(courseId: String) {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        // TODO: Удалить связанные сущности? (Прогресс студентов, покупки, записи в вишлистах?)
+        // TODO: Удалить файлы из R2?
+
+        val author = userRepository.findById(course.authorId).orElse(null)
+        author?.let {
+            it.createdCourseIds.remove(courseId)
+            userRepository.save(it)
+        }
+
+        courseRepository.deleteById(courseId)
+    }
+
+    @CacheEvict(value = ["courses"], key = "#courseId")
+    fun addLessonAdmin(courseId: String, lessonDto: AdminCreateUpdateLessonRequestDTO): AdminCourseDetailDTO {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        val lessonSlug = SlugUtils.generateUniqueSlug(lessonDto.title) { slug ->
+            course.lessons.any { it.slug == slug }
+        }
+
+        val newLesson = Lesson(
+            id = UUID.randomUUID().toString(),
+            title = lessonDto.title,
+            slug = lessonSlug,
+            content = lessonDto.content,
+            codeExamples = lessonDto.codeExamples ?: emptyList(),
+            tasks = lessonDto.tasks ?: emptyList(),
+            attachments = lessonDto.attachments ?: emptyList(),
+            mainAttachment = lessonDto.mainAttachment
+        )
+
+        course.lessons.add(newLesson)
+        val savedCourse = courseRepository.save(course)
+        return getCourseDetailsAdmin(savedCourse.id!!)
+    }
+
+    @CacheEvict(value = ["courses"], key = "#courseId")
+    fun updateLessonAdmin(
+        courseId: String,
+        lessonId: String,
+        lessonDto: AdminCreateUpdateLessonRequestDTO
+    ): AdminCourseDetailDTO {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        val lessonIndex = course.lessons.indexOfFirst { it.id == lessonId }
+        if (lessonIndex == -1) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Урок с ID $lessonId не найден в курсе")
+        }
+
+        val existingLesson = course.lessons[lessonIndex]
+
+        val newLessonSlug = if (existingLesson.title != lessonDto.title) {
+            SlugUtils.generateUniqueSlug(lessonDto.title) { newSlug ->
+                newSlug != existingLesson.slug && course.lessons.any { it.slug == newSlug && it.id != lessonId }
+            }
+        } else {
+            existingLesson.slug
+        }
+
+        val updatedLesson = existingLesson.copy(
+            title = lessonDto.title,
+            slug = newLessonSlug,
+            content = lessonDto.content,
+            codeExamples = lessonDto.codeExamples ?: existingLesson.codeExamples,
+            tasks = lessonDto.tasks ?: existingLesson.tasks,
+            attachments = lessonDto.attachments ?: existingLesson.attachments,
+            mainAttachment = lessonDto.mainAttachment
+        )
+
+        course.lessons[lessonIndex] = updatedLesson
+        val savedCourse = courseRepository.save(course)
+        return getCourseDetailsAdmin(savedCourse.id!!)
+    }
+
+    @CacheEvict(value = ["courses"], key = "#courseId")
+    fun deleteLessonAdmin(courseId: String, lessonId: String) {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+
+        val removed = course.lessons.removeIf { it.id == lessonId }
+        if (!removed) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Урок с ID $lessonId не найден в курсе")
+        }
+
+        // TODO: Подумать об удалении связанных данных прогресса студентов для этого урока?
+
+        courseRepository.save(course)
+    }
+
     fun findByIds(courseIds: List<String>): List<CourseDTO> {
         if (courseIds.isEmpty()) return emptyList()
 

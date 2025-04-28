@@ -24,46 +24,68 @@ class JwtAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain
     ) {
-        val accessToken = extractTokenFromCookie(request)
+        var chainProcessed = false
+        try {
 
-        if (accessToken == null) {
-            filterChain.doFilter(request, response)
-            return
-        }
+            val accessToken = extractTokenFromCookie(request)
 
-        if (!jwtUtils.validateToken(accessToken)) {
-            log.warn("Invalid or expired access token found for URI: {}", request.requestURI)
-            filterChain.doFilter(request, response)
-            return
-        }
-
-        if (SecurityContextHolder.getContext().authentication == null) {
-            try {
-                val email = jwtUtils.getSubjectFromToken(accessToken)
-
-                val userDetails = userDetailsService.loadUserByUsername(email)
-
-                val authentication = UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.authorities
-                )
-                authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
-
-                SecurityContextHolder.getContext().authentication = authentication
-                log.info(
-                    "Successfully authenticated user '{}' with authorities {} for URI: {}",
-                    email,
-                    userDetails.authorities,
-                    request.requestURI
-                )
-            } catch (e: Exception) {
-                log.error("Could not set user authentication in security context for URI: {}", request.requestURI, e)
-                SecurityContextHolder.clearContext()
+            if (accessToken == null) {
+                log.info("[JWT Filter] No token, proceeding chain...")
+                filterChain.doFilter(request, response)
+                chainProcessed = true
+                return
             }
-        }
 
-        filterChain.doFilter(request, response)
+            if (!jwtUtils.validateToken(accessToken)) {
+                log.info("[JWT Filter] Invalid token, proceeding chain...")
+                filterChain.doFilter(request, response)
+                chainProcessed = true
+                return
+            }
+
+            if (SecurityContextHolder.getContext().authentication == null) {
+                try {
+                    val email = jwtUtils.getSubjectFromToken(accessToken)
+
+                    val userDetails = userDetailsService.loadUserByUsername(email)
+
+                    val authentication = UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        userDetails.authorities
+                    )
+                    authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
+
+                    SecurityContextHolder.getContext().authentication = authentication
+                    log.info(
+                        "Successfully authenticated user '{}' with authorities {} for URI: {}",
+                        email,
+                        userDetails.authorities,
+                        request.requestURI
+                    )
+                } catch (e: Exception) {
+                    log.error(
+                        "Could not set user authentication in security context for URI: {}",
+                        request.requestURI,
+                        e
+                    )
+                    SecurityContextHolder.clearContext()
+                }
+            }
+
+            log.info("[JWT Filter] Context set (or already set), proceeding chain...")
+            filterChain.doFilter(request, response)
+            chainProcessed = true
+        } catch (e: Exception) {
+            log.error("[JWT Filter] Error in filter, clearing context.", e)
+            SecurityContextHolder.clearContext()
+
+            log.info("[JWT Filter] Proceeding chain after CATCH block...")
+            filterChain.doFilter(request, response)
+            chainProcessed = true
+        } finally {
+            log.info("[JWT Filter] Finally block. Chain processed: {}", chainProcessed)
+        }
     }
 
     private fun extractTokenFromCookie(request: HttpServletRequest): String? {

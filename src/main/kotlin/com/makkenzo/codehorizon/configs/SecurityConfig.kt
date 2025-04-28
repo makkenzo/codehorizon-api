@@ -1,9 +1,10 @@
 package com.makkenzo.codehorizon.configs
 
 import com.makkenzo.codehorizon.filters.JwtAuthenticationFilter
+import com.makkenzo.codehorizon.handlers.CustomAccessDeniedHandler
+import com.makkenzo.codehorizon.handlers.JsonAuthenticationEntryPoint
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.http.HttpStatus
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -11,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 
 @Configuration
@@ -18,7 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity(prePostEnabled = true)
 class SecurityConfig(
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
-    private val customAuthenticationEntryPoint: CustomAuthenticationEntryPoint
+    private val customAccessDeniedHandler: CustomAccessDeniedHandler,
+    private val jsonAuthenticationEntryPoint: JsonAuthenticationEntryPoint
 ) {
     @Bean
     fun passwordEncoder(): PasswordEncoder {
@@ -27,7 +30,7 @@ class SecurityConfig(
 
     @Bean
     fun filterChain(
-        http: HttpSecurity,
+        http: HttpSecurity, accessDeniedHandler: AccessDeniedHandler,
     ): SecurityFilterChain {
         http.csrf { it.disable() }
             .cors {}
@@ -52,12 +55,8 @@ class SecurityConfig(
             }
             .exceptionHandling { exceptions ->
                 exceptions
-                    .authenticationEntryPoint(customAuthenticationEntryPoint)
-                    .accessDeniedHandler { request, response, accessDeniedException ->
-                        response.status = HttpStatus.FORBIDDEN.value()
-                        response.contentType = "application/json"
-                        response.writer.write("{\"error\": \"Forbidden: ${accessDeniedException.message}\"}")
-                    }
+                    .authenticationEntryPoint(jsonAuthenticationEntryPoint)
+                    .accessDeniedHandler(customAccessDeniedHandler)
             }
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
         return http.build()
