@@ -9,4 +9,5 @@ interface CourseProgressRepository : MongoRepository<CourseProgress, String> {
     fun findByUserIdAndCourseId(userId: String, courseId: String): CourseProgress?
     fun findByUserId(userId: String, pageable: Pageable): Page<CourseProgress>
     fun countByUserIdAndProgressGreaterThanEqual(userId: String, progress: Double): Int
+    fun countByProgressGreaterThanEqual(progress: Double): Long
 }

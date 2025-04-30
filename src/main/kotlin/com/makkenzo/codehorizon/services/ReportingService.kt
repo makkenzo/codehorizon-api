@@ -5,6 +5,7 @@ import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.Purchase
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.bson.Document
@@ -25,7 +26,8 @@ import java.util.stream.Stream
 class ReportingService(
     private val userRepository: UserRepository,
     private val courseRepository: CourseRepository,
-    private val mongoTemplate: MongoTemplate
+    private val mongoTemplate: MongoTemplate,
+    private val courseProgressRepository: CourseProgressRepository
 ) {
     fun getDashboardStats(): AdminDashboardStatsDTO {
         val totalUsers = userRepository.count()
@@ -49,14 +51,19 @@ class ReportingService(
         val totalRevenueLong = revenueResult?.getLong("totalRevenueLong") ?: 0L
         val totalRevenue = totalRevenueLong / 100.0
 
-        val activeSessions = 0
+        val completedCoursesCount = try {
+            courseProgressRepository.countByProgressGreaterThanEqual(100.0)
+        } catch (e: Exception) {
+            println("WARN: Failed to count completed courses: ${e.message}. Falling back to 0.")
+            0L
+        }
 
         return AdminDashboardStatsDTO(
             totalUsers = totalUsers,
             newUsersToday = newUsersToday,
             totalCourses = totalCourses,
             totalRevenue = totalRevenue,
-            activeSessions = activeSessions
+            completedCoursesCount = completedCoursesCount
         )
     }
 
@@ -123,7 +130,6 @@ class ReportingService(
 
         return finalTimeSeries
     }
-
 
     private fun getRevenueTimeSeries(days: Long): List<TimeSeriesDataPointDTO> {
         if (days <= 0) return emptyList()

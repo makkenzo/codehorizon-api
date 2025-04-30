@@ -5,5 +5,5 @@ data class AdminDashboardStatsDTO(
     val newUsersToday: Long,
     val totalCourses: Long,
     val totalRevenue: Double,
-    val activeSessions: Int
+    val completedCoursesCount: Long
 )
