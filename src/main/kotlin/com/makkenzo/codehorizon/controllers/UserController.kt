@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -59,6 +60,10 @@ class UserController(
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
         val userId = jwtUtils.getIdFromToken(token)
-        return ResponseEntity.ok(courseProgressService.getUserCourseProgress(userId, courseId) != null)
+        return if (courseProgressService.getUserCourseProgress(userId, courseId) != null) {
+            ResponseEntity.ok(true)
+        } else {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
     }
 }
