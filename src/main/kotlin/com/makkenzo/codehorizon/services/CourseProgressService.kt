@@ -80,7 +80,11 @@ class CourseProgressService(
             progress = newProgress.coerceIn(0.0, 100.0),
             lastUpdated = Instant.now()
         )
-        
+
         return courseProgressRepository.save(updatedProgress)
+    }
+
+    fun getUserProgressByCourse(userId: String, courseId: String): CourseProgress? {
+        return courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
     }
 }

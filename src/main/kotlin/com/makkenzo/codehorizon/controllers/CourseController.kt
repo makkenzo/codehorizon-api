@@ -284,13 +284,36 @@ class CourseController(
             val token = request.cookies?.find { it.name == "access_token" }?.value
                 ?: throw IllegalArgumentException("Access token cookie is missing")
             val userId = jwtUtils.getIdFromToken(token)
-            
+
             val updatedProgress = courseProgressService.markLessonAsComplete(userId, courseId, lessonId)
             ResponseEntity.ok(updatedProgress)
         } catch (e: NotFoundException) {
             throw e
         } catch (e: AccessDeniedException) {
             throw e
+        } catch (e: IllegalArgumentException) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, e.message)
+        }
+    }
+
+    @GetMapping("/{courseId}/progress")
+    @Operation(
+        summary = "Получить прогресс пользователя по курсу",
+        security = [SecurityRequirement(name = "bearerAuth")]
+    )
+    fun getUserCourseProgress(
+        @PathVariable courseId: String,
+        request: HttpServletRequest
+    ): ResponseEntity<CourseProgress> {
+        return try {
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val userId = jwtUtils.getIdFromToken(token)
+            val progress = courseProgressService.getUserProgressByCourse(userId, courseId)
+                ?: return ResponseEntity.notFound().build()
+            ResponseEntity.ok(progress)
+        } catch (e: NotFoundException) {
+            return ResponseEntity.notFound().build()
         } catch (e: IllegalArgumentException) {
             throw ResponseStatusException(HttpStatus.UNAUTHORIZED, e.message)
         }
