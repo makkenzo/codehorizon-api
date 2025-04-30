@@ -47,6 +47,7 @@ class SecurityConfig(
                         "/api/courses",
                         "/api/courses/{slug}",
                         "/api/users/{username}/profile",
+                        "/api/payments/stripe/webhook",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/actuator/**"
