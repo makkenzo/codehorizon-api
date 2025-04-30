@@ -28,14 +28,38 @@ class StripeService(
 
         when (event.type) {
             "checkout.session.completed" -> {
-                val session = event.dataObjectDeserializer.`object`.get() as Session
+                val session = event.dataObjectDeserializer.`object`.orElse(null) as? Session
+                if (session == null) {
+                    println("!!! Не удалось десериализовать Session из события ${event.id}")
+                    return
+                }
 
-                val userId = session.metadata["userId"]
-                val courseId = session.metadata["courseId"]
+                if ("paid" == session.paymentStatus) {
+                    val userId = session.metadata["userId"]
+                    val courseId = session.metadata["courseId"]
+                    val amountTotal = session.amountTotal
+                    val currency = session.currency
 
-                if (userId != null && courseId != null) {
-                    purchaseService.createPurchase(userId, courseId, session.id)
-                    courseProgressService.addCourseProgress(userId, courseId)
+                    if (userId != null && courseId != null && amountTotal != null && currency != null) {
+                        purchaseService.createPurchase(
+                            userId = userId,
+                            courseId = courseId,
+                            stripeSessionId = session.id,
+                            amount = amountTotal,
+                            currency = currency.lowercase()
+                        )
+
+                        try {
+                            courseProgressService.addCourseProgress(userId, courseId)
+                            println("Прогресс для курса $courseId успешно создан/обновлен для пользователя $userId.")
+                        } catch (e: Exception) {
+                            println("!!! Ошибка при создании/обновлении прогресса для $userId / $courseId: ${e.message}")
+                        }
+                    } else {
+                        println("!!! Недостаточно метаданных или данных о сумме в сессии ${session.id}: userId=$userId, courseId=$courseId, amountTotal=$amountTotal, currency=$currency")
+                    }
+                } else {
+                    println("Сессия ${session.id} завершена, но статус оплаты НЕ 'paid' (статус: ${session.paymentStatus}). Покупка не создана.")
                 }
             }
 
