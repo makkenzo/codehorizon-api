@@ -3,9 +3,13 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.repositories.CourseProgressRepository
+import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -18,6 +22,8 @@ class UserService(
     private val passwordEncoder: PasswordEncoder,
     private val profileService: ProfileService,
     private val profileRepository: ProfileRepository,
+    private val courseRepository: CourseRepository,
+    private val courseProgressRepository: CourseProgressRepository,
 ) {
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
         val userPage = userRepository.findAll(pageable)
@@ -164,13 +170,48 @@ class UserService(
         )
 
         val profile = profileRepository.findByUserId(user.id!!)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
+            ?: throw ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Профиль пользователя не найден"
+            )
+
+        val progressPageable = PageRequest.of(0, 3, Sort.by(Sort.Direction.DESC, "lastUpdated"))
+        val progressList = courseProgressRepository.findByUserId(user.id, progressPageable).content
+        val courseIdsInProgress = progressList.map { it.courseId }
+        val coursesInProgressMap = courseRepository.findAllById(courseIdsInProgress).associateBy { it.id }
+
+        val coursesInProgressDTO = progressList.mapNotNull { progress ->
+            coursesInProgressMap[progress.courseId]?.let { course ->
+                PublicCourseInfoDTO(
+                    id = course.id!!,
+                    title = course.title,
+                    slug = course.slug,
+                    imagePreview = course.imagePreview,
+                    progress = progress.progress
+                )
+            }
+        }
+
+        val completedCount = courseProgressRepository.countByUserIdAndProgressGreaterThanEqual(user.id, 100.0)
+
+        val createdCoursesDTO = if (user.createdCourseIds.isNotEmpty()) {
+            val createdCourses = courseRepository.findAllById(user.createdCourseIds)
+            createdCourses.map { course ->
+                PublicCourseInfoDTO(
+                    id = course.id!!,
+                    title = course.title,
+                    slug = course.slug,
+                    imagePreview = course.imagePreview,
+                    progress = null
+                )
+            }
+        } else {
+            null
+        }
 
         return UserProfileDTO(
             id = user.id,
             username = user.username,
-            email = user.email,
-            isVerified = user.isVerified,
             profile = ProfileDTO(
                 firstName = profile.firstName,
                 lastName = profile.lastName,
@@ -179,7 +220,11 @@ class UserService(
                 bio = profile.bio,
                 location = profile.location,
                 website = profile.website
-            )
+            ),
+
+            coursesInProgress = coursesInProgressDTO.ifEmpty { null },
+            completedCoursesCount = completedCount,
+            createdCourses = createdCoursesDTO
         )
     }
 }
