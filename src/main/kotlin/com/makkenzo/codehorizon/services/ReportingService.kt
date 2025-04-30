@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -10,6 +11,7 @@ import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.aggregation.Aggregation.*
 import org.springframework.data.mongodb.core.aggregation.AggregationResults
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.stereotype.Service
 import java.time.LocalDate
@@ -133,16 +135,50 @@ class ReportingService(
         }
     }
 
-    // TODO: Нужна реальная метрика популярности (кол-во студентов, покупок)
     private fun getTopCoursesByStudents(limit: Int): List<CoursePopularityDTO> {
-        // Заглушка: Берем первые 'limit' курсов
-        return courseRepository.findAll(Sort.by(Sort.Direction.DESC, "title"))
-            .take(limit)
-            .map {
-                CoursePopularityDTO(
-                    courseTitle = it.title.take(25) + if (it.title.length > 25) "..." else "",
-                    studentCount = (50..600).random()
-                )
-            }
+        if (limit <= 0) return emptyList()
+
+        val groupStage = group("courseId")
+            .addToSet("userId").`as`("uniqueUserIds")
+
+        val projectCountStage = project()
+            .and("_id").`as`("courseId")
+            .and("uniqueUserIds").size().`as`("studentCount")
+
+        val sortStage = sort(Sort.Direction.DESC, "studentCount")
+        val limitStage = limit(limit.toLong())
+
+        val convertToObjectIdStage = project("studentCount", "courseId")
+            .and(ConvertOperators.ToObjectId.toObjectId("\$courseId")).`as`("courseObjectId")
+
+        val lookupStage = lookup("courses", "courseObjectId", "_id", "courseInfo")
+
+        val unwindStage = unwind("courseInfo", true)
+
+        val matchCourseExistsStage = match(Criteria.where("courseInfo").exists(true))
+
+        val projectResultStage = project("studentCount")
+            .and("courseInfo.title").`as`("courseTitle")
+            .andExclude("_id")
+
+        val aggregation = newAggregation(
+            groupStage,
+            projectCountStage,
+            sortStage,
+            limitStage,
+            convertToObjectIdStage,
+            lookupStage,
+            unwindStage,
+            matchCourseExistsStage,
+            projectResultStage
+        )
+
+        val aggregationResults = mongoTemplate.aggregate(
+            aggregation,
+            CourseProgress::class.java,
+            CoursePopularityDTO::class.java
+        )
+
+        return aggregationResults.mappedResults
     }
 }
