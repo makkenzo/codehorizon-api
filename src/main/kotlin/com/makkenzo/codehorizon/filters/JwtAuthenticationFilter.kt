@@ -30,14 +30,12 @@ class JwtAuthenticationFilter(
             val accessToken = extractTokenFromCookie(request)
 
             if (accessToken == null) {
-                log.info("[JWT Filter] No token, proceeding chain...")
                 filterChain.doFilter(request, response)
                 chainProcessed = true
                 return
             }
 
             if (!jwtUtils.validateToken(accessToken)) {
-                log.info("[JWT Filter] Invalid token, proceeding chain...")
                 filterChain.doFilter(request, response)
                 chainProcessed = true
                 return
@@ -57,34 +55,18 @@ class JwtAuthenticationFilter(
                     authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
 
                     SecurityContextHolder.getContext().authentication = authentication
-                    log.info(
-                        "Successfully authenticated user '{}' with authorities {} for URI: {}",
-                        email,
-                        userDetails.authorities,
-                        request.requestURI
-                    )
                 } catch (e: Exception) {
-                    log.error(
-                        "Could not set user authentication in security context for URI: {}",
-                        request.requestURI,
-                        e
-                    )
                     SecurityContextHolder.clearContext()
                 }
             }
 
-            log.info("[JWT Filter] Context set (or already set), proceeding chain...")
             filterChain.doFilter(request, response)
             chainProcessed = true
         } catch (e: Exception) {
-            log.error("[JWT Filter] Error in filter, clearing context.", e)
             SecurityContextHolder.clearContext()
 
-            log.info("[JWT Filter] Proceeding chain after CATCH block...")
             filterChain.doFilter(request, response)
             chainProcessed = true
-        } finally {
-            log.info("[JWT Filter] Finally block. Chain processed: {}", chainProcessed)
         }
     }
 

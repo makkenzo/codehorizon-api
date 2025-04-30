@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseProgress
+import com.makkenzo.codehorizon.models.Purchase
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -34,7 +35,20 @@ class ReportingService(
         val startOfTomorrow = LocalDate.now().plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
         val newUsersToday = userRepository.countByCreatedAtBetween(startOfDay, startOfTomorrow)
 
-        val totalRevenue = 0.0
+        val matchStage = match(Criteria.where("amount").exists(true).ne(null))
+        val groupStage = group()
+            .sum("amount").`as`("totalRevenueLong")
+        val aggregation = newAggregation(matchStage, groupStage)
+
+        val revenueResult = mongoTemplate.aggregate(
+            aggregation,
+            Purchase::class.java,
+            Document::class.java
+        ).uniqueMappedResult
+
+        val totalRevenueLong = revenueResult?.getLong("totalRevenueLong") ?: 0L
+        val totalRevenue = totalRevenueLong / 100.0
+
         val activeSessions = 0
 
         return AdminDashboardStatsDTO(
@@ -112,13 +126,77 @@ class ReportingService(
 
 
     private fun getRevenueTimeSeries(days: Long): List<TimeSeriesDataPointDTO> {
-        // TODO: Реализовать агрегацию MongoDB по коллекции покупок (purchases)
+        if (days <= 0) return emptyList()
 
+        val startDate = LocalDate.now().minusDays(days - 1)
         val endDate = LocalDate.now()
-        val startDate = endDate.minusDays(days - 1)
-        return startDate.datesUntil(endDate.plusDays(1)).map { date ->
-            TimeSeriesDataPointDTO(date, (100..500).random().toDouble())
-        }.toList()
+
+        val matchStage = match(
+            Criteria.where("createdAt").gte(startDate.atStartOfDay().toInstant(ZoneOffset.UTC))
+                .and("amount").exists(true).ne(null)
+                .and("currency").exists(true).ne(null)
+        )
+
+        val projectDateStage = project("amount")
+            .and { _ ->
+                Document(
+                    "\$dateToString", Document()
+                        .append("format", "%Y-%m-%d")
+                        .append("date", "\$createdAt")
+                        .append("timezone", "UTC")
+                )
+            }.`as`("purchaseDateStr")
+
+        val groupStage = group("purchaseDateStr")
+            .sum("amount").`as`("dailyRevenueLong")
+
+        val projectResultStage = project("dailyRevenueLong")
+            .and("_id").`as`("dateStr")
+            .andExclude("_id")
+
+        val sortStage = sort(Sort.Direction.ASC, "dateStr")
+
+        val aggregation = newAggregation(
+            matchStage,
+            projectDateStage,
+            groupStage,
+            projectResultStage,
+            sortStage
+        )
+
+        val aggregationResults = mongoTemplate.aggregate(
+            aggregation,
+            Purchase::class.java,
+            Document::class.java
+        )
+
+        val resultsDTO = aggregationResults.mappedResults.mapNotNull { doc ->
+            val dateStr = doc.getString("dateStr")
+            val valueLong = doc.getLong("dailyRevenueLong") ?: return@mapNotNull null
+
+            val valueDouble = valueLong / 100.0
+
+            try {
+                val date = LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE)
+                TimeSeriesDataPointDTO(date = date, value = valueDouble)
+            } catch (e: Exception) {
+                println("WARN: Could not parse date string '$dateStr' from revenue aggregation.")
+                null
+            }
+        }
+
+        val resultMap = resultsDTO.associateBy { it.date }
+        val finalTimeSeries = mutableListOf<TimeSeriesDataPointDTO>()
+
+        Stream.iterate(startDate) { date -> date.plusDays(1) }
+            .limit(days)
+            .forEach { currentDate: LocalDate ->
+                finalTimeSeries.add(
+                    resultMap.getOrDefault(currentDate, TimeSeriesDataPointDTO(date = currentDate, value = 0.0))
+                )
+            }
+
+        return finalTimeSeries
     }
 
     private fun getCategoryDistribution(): List<CategoryDistributionDTO> {
