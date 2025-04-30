@@ -4,8 +4,10 @@ import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
+import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.services.CloudflareService
+import com.makkenzo.codehorizon.services.CourseProgressService
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -22,6 +24,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
+import org.springframework.web.server.ResponseStatusException
 
 @RestController
 @RequestMapping("/api/courses")
@@ -29,7 +32,8 @@ import org.springframework.web.multipart.MultipartFile
 class CourseController(
     private val courseService: CourseService,
     private val jwtUtils: JwtUtils,
-    private val cloudflareService: CloudflareService
+    private val cloudflareService: CloudflareService,
+    private val courseProgressService: CourseProgressService
 ) {
     @GetMapping
     @Operation(summary = "Получить все курсы")
@@ -238,6 +242,57 @@ class CourseController(
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to e.message))
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to e.message))
+        }
+    }
+
+    @GetMapping("/{courseId}/learn-content")
+    @Operation(
+        summary = "Получить полный контент курса для обучения (требует доступа)",
+        security = [SecurityRequirement(name = "bearerAuth")]
+    )
+    fun getCourseLearnContent(
+        @PathVariable courseId: String,
+        request: HttpServletRequest
+    ): ResponseEntity<Course> {
+        return try {
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val userId = jwtUtils.getIdFromToken(token)
+
+            val course = courseService.getFullCourseForLearning(courseId, userId)
+            ResponseEntity.ok(course)
+        } catch (e: AccessDeniedException) {
+            throw e
+        } catch (e: NotFoundException) {
+            throw e
+        } catch (e: IllegalArgumentException) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, e.message)
+        }
+    }
+
+    @PostMapping("/{courseId}/lessons/{lessonId}/complete")
+    @Operation(
+        summary = "Отметить урок как пройденный",
+        security = [SecurityRequirement(name = "bearerAuth")]
+    )
+    fun markLessonComplete(
+        @PathVariable courseId: String,
+        @PathVariable lessonId: String,
+        request: HttpServletRequest
+    ): ResponseEntity<CourseProgress> {
+        return try {
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: throw IllegalArgumentException("Access token cookie is missing")
+            val userId = jwtUtils.getIdFromToken(token)
+            
+            val updatedProgress = courseProgressService.markLessonAsComplete(userId, courseId, lessonId)
+            ResponseEntity.ok(updatedProgress)
+        } catch (e: NotFoundException) {
+            throw e
+        } catch (e: AccessDeniedException) {
+            throw e
+        } catch (e: IllegalArgumentException) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, e.message)
         }
     }
 }

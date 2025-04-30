@@ -2,17 +2,21 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
+import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import java.time.Instant
 
 @Service
 class CourseProgressService(
     private val courseProgressRepository: CourseProgressRepository,
     private val userRepository: UserRepository,
-    private val courseService: CourseService
+    private val courseService: CourseService,
+    private val courseRepository: CourseRepository
 ) {
     fun addCourseProgress(userId: String, courseId: String): CourseProgress {
         val doc = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
@@ -51,5 +55,32 @@ class CourseProgressService(
     fun getUserCourseProgress(userId: String, courseId: String): Double? {
         val progress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
         return progress?.progress
+    }
+
+    fun markLessonAsComplete(userId: String, courseId: String, lessonId: String): CourseProgress {
+        val courseProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
+            ?: throw NotFoundException("Прогресс для пользователя $userId и курса $courseId не найден. Возможно, нет доступа?")
+
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс с ID $courseId не найден для расчета прогресса") }
+
+        val totalLessons = course.lessons.size
+        if (totalLessons == 0) {
+            return courseProgress.copy(progress = 0.0, lastUpdated = Instant.now())
+        }
+
+        val updatedCompletedLessons = courseProgress.completedLessons.toMutableSet()
+        val added = updatedCompletedLessons.add(lessonId)
+
+        val newProgress = (updatedCompletedLessons.size.toDouble() / totalLessons.toDouble()) * 100.0
+
+
+        val updatedProgress = courseProgress.copy(
+            completedLessons = updatedCompletedLessons.toList(),
+            progress = newProgress.coerceIn(0.0, 100.0),
+            lastUpdated = Instant.now()
+        )
+        
+        return courseProgressRepository.save(updatedProgress)
     }
 }

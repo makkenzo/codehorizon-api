@@ -5,6 +5,7 @@ import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
 import com.makkenzo.codehorizon.models.Lesson
+import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import com.makkenzo.codehorizon.utils.MediaUtils
@@ -36,7 +37,8 @@ class CourseService(
     private val courseRepository: CourseRepository,
     private val userService: UserService,
     private val userRepository: UserRepository,
-    private val mongoTemplate: MongoTemplate
+    private val mongoTemplate: MongoTemplate,
+    private val courseProgressRepository: CourseProgressRepository
 ) {
     fun findAllCoursesAdmin(pageable: Pageable, titleSearch: String?): PagedResponseDTO<AdminCourseListItemDTO> {
         val criteria = Criteria()
@@ -640,5 +642,16 @@ class CourseService(
         videoUrls.addAll(course.lessons.mapNotNull { it.mainAttachment })
 
         return videoUrls.sumOf { MediaUtils.getVideoDuration(it) }
+    }
+
+    fun getFullCourseForLearning(courseId: String, userId: String): Course {
+        val progressExists = courseProgressRepository.findByUserIdAndCourseId(userId, courseId) != null
+
+        if (!progressExists) {
+            throw AccessDeniedException("У вас нет доступа к этому курсу.")
+        }
+
+        return courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс с ID $courseId не найден") }
     }
 }
