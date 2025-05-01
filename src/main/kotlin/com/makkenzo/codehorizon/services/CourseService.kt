@@ -113,6 +113,12 @@ class CourseService(
         )
     }
 
+    fun getDistinctCategories(): List<String> {
+        val query = Query().addCriteria(Criteria.where("category").ne(null).ne(""))
+        val categories = mongoTemplate.findDistinct(query, "category", Course::class.java, String::class.java)
+        return categories.sorted()
+    }
+
     @CacheEvict(value = ["courses"], allEntries = true)
     fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
         val author = userRepository.findById(request.authorId)

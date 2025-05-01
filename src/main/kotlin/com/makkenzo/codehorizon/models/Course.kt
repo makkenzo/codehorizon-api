@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.models
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
+import java.time.Instant
 
 @Document(collection = "courses")
 data class Course(
@@ -28,6 +29,8 @@ data class Course(
     val benefitTitle: String? = null,
     val benefitDescription: String? = null,
     val testimonial: TestimonialData? = null,
+
+    val createdAt: Instant = Instant.now()
 )
 
 enum class CourseDifficultyLevels {

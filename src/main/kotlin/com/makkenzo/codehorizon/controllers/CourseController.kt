@@ -147,6 +147,13 @@ class CourseController(
 //        }
 //    }
 
+    @GetMapping("/categories")
+    @Operation(summary = "Получить список уникальных категорий курсов")
+    fun getCategories(): ResponseEntity<List<String>> {
+        val categories = courseService.getDistinctCategories()
+        return ResponseEntity.ok(categories)
+    }
+
     @GetMapping("/{courseId}/learn-content")
     @Operation(
         summary = "Получить полный контент курса для обучения",
