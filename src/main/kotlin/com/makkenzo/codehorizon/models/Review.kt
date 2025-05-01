@@ -1,9 +1,18 @@
 package com.makkenzo.codehorizon.models
 
+import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.CompoundIndex
+import org.springframework.data.mongodb.core.mapping.Document
+import java.time.Instant
+
+@Document(collection = "reviews")
+@CompoundIndex(name = "course_author_idx", def = "{'courseId': 1, 'authorId': 1}", unique = true)
 data class Review(
-    var id: String? = null,
+    @Id val id: String? = null,
+    val courseId: String,
+    val authorId: String,
+    var rating: Int,
     var text: String? = null,
-    var rating: Int? = null,
-    var authorId: String? = null,
-    var courseId: String? = null,
+    val createdAt: Instant = Instant.now(),
+    var updatedAt: Instant = Instant.now()
 )

@@ -50,7 +50,8 @@ class SecurityConfig(
                         "/api/payments/stripe/webhook",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
-                        "/actuator/**"
+                        "/actuator/**",
+                        "/api/courses/{courseId}/reviews"
                     ).permitAll()
                     .anyRequest().authenticated()
             }
