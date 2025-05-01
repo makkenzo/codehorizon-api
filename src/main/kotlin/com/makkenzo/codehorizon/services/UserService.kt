@@ -10,6 +10,11 @@ import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.aggregation.Aggregation.*
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators
+import org.springframework.data.mongodb.core.aggregation.LookupOperation
+import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -24,6 +29,7 @@ class UserService(
     private val profileRepository: ProfileRepository,
     private val courseRepository: CourseRepository,
     private val courseProgressRepository: CourseProgressRepository,
+    private val mongoTemplate: MongoTemplate,
 ) {
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
         val userPage = userRepository.findAll(pageable)
@@ -226,5 +232,47 @@ class UserService(
             completedCoursesCount = completedCount,
             createdCourses = createdCoursesDTO
         )
+    }
+
+    fun getPopularAuthors(limit: Int): List<PopularAuthorDTO> {
+        val matchStage = match(Criteria.where("createdCourseIds").exists(true).ne(emptyList<String>()))
+        val projectStage1 = project("_id", "username", "createdCourseIds")
+            .and("createdCourseIds").size().`as`("courseCount")
+        val sortStage = sort(Sort.Direction.DESC, "courseCount")
+        val limitStage = limit(limit.toLong())
+        val addFieldsStage =
+            addFields().addField("userIdStr").withValue(ConvertOperators.ToString.toString("\$_id")).build()
+        val lookupStage = LookupOperation.newLookup()
+            .from("profiles")
+            .localField("userIdStr")
+            .foreignField("userId")
+            .`as`("authorProfile")
+        val unwindStage = unwind("authorProfile", true)
+        val projectStageFinal = project("courseCount", "username")
+            .and("_id").`as`("userId")
+            .and("authorProfile.firstName").`as`("firstName")
+            .and("authorProfile.lastName").`as`("lastName")
+            .and("authorProfile.avatarUrl").`as`("avatarUrl")
+            .and("authorProfile.avatarColor").`as`("avatarColor")
+            .andExclude("_id")
+
+        val aggregation = newAggregation(
+            matchStage,
+            projectStage1,
+            sortStage,
+            limitStage,
+            addFieldsStage,
+            lookupStage,
+            unwindStage,
+            projectStageFinal
+        )
+
+        val aggregationResults = mongoTemplate.aggregate(
+            aggregation,
+            User::class.java,
+            PopularAuthorDTO::class.java
+        )
+
+        return aggregationResults.mappedResults
     }
 }

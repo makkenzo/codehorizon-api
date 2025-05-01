@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
+import com.makkenzo.codehorizon.dtos.PopularAuthorDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.dtos.UserProfileDTO
 import com.makkenzo.codehorizon.services.CourseProgressService
@@ -65,5 +66,14 @@ class UserController(
         } else {
             ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
+    }
+
+    @GetMapping("/popular-authors")
+    @Operation(summary = "Получить список популярных авторов")
+    fun getPopularAuthors(
+        @RequestParam(defaultValue = "5") limit: Int
+    ): ResponseEntity<List<PopularAuthorDTO>> {
+        val authors = userService.getPopularAuthors(limit.coerceAtMost(limit))
+        return ResponseEntity.ok(authors)
     }
 }
