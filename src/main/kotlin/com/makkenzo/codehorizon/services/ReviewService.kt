@@ -4,14 +4,18 @@ import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Review
 import com.makkenzo.codehorizon.repositories.*
+import org.bson.Document
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.aggregation.Aggregation.*
+import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
-
 import java.time.Instant
 
 @Service
@@ -20,7 +24,8 @@ class ReviewService(
     private val reviewRepository: ReviewRepository,
     private val userRepository: UserRepository,
     private val profileRepository: ProfileRepository,
-    private val courseRepository: CourseRepository
+    private val courseRepository: CourseRepository,
+    private val mongoTemplate: MongoTemplate
 ) {
     @Transactional
     fun createReview(courseId: String, authorId: String, dto: CreateReviewRequestDTO): ReviewDTO {
@@ -102,6 +107,66 @@ class ReviewService(
         val courseId = review.courseId
         reviewRepository.deleteById(reviewId)
         updateCourseAverageRating(courseId)
+    }
+
+    fun getReviewsWithDistribution(courseId: String, pageable: Pageable): ReviewsWithDistributionDTO {
+
+        val reviewPage: Page<Review> = reviewRepository.findByCourseId(courseId, pageable)
+        val reviewDTOs = reviewPage.content.map { mapReviewToDTO(it) }
+        val pagedReviews = PagedResponseDTO(
+            content = reviewDTOs,
+            pageNumber = reviewPage.number,
+            pageSize = reviewPage.size,
+            totalElements = reviewPage.totalElements,
+            totalPages = reviewPage.totalPages,
+            isLast = reviewPage.isLast
+        )
+
+
+        val distribution = calculateRatingDistribution(courseId)
+
+        return ReviewsWithDistributionDTO(
+            reviewsPage = pagedReviews,
+            ratingDistribution = distribution
+        )
+    }
+
+    private fun calculateRatingDistribution(courseId: String): List<RatingDistributionDTO> {
+        val matchStage = match(Criteria.where("courseId").`is`(courseId))
+        val groupStage = group("rating").count().`as`("count")
+        val projectStage = project("count").and("_id").`as`("rating")
+        val sortStage = sort(Sort.Direction.DESC, "rating")
+
+        val aggregation = newAggregation(matchStage, groupStage, projectStage, sortStage)
+        val aggregationResults = mongoTemplate.aggregate(
+            aggregation,
+            Review::class.java,
+            Document::class.java
+        )
+
+        val ratingCounts = aggregationResults.mappedResults.associate { doc ->
+            val rating = when (val ratingValue = doc.get("rating")) {
+                is Number -> ratingValue.toInt()
+                else -> 0
+            }
+            val count = when (val countValue = doc.get("count")) {
+                is Number -> countValue.toLong()
+                else -> 0L
+            }
+            rating to count
+        }
+
+        val totalReviews = ratingCounts.values.sum()
+
+        return (5 downTo 1).map { rating ->
+            val count = ratingCounts[rating] ?: 0L
+            val percentage = if (totalReviews > 0) (count.toDouble() / totalReviews.toDouble() * 100.0) else 0.0
+            RatingDistributionDTO(rating = rating, count = count, percentage = percentage)
+        }
+    }
+
+    fun getRatingDistribution(courseId: String): List<RatingDistributionDTO> {
+        return calculateRatingDistribution(courseId)
     }
 
     fun getReviewByAuthorAndCourse(authorId: String, courseId: String): ReviewDTO {

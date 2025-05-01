@@ -1,9 +1,6 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.dtos.CreateReviewRequestDTO
-import com.makkenzo.codehorizon.dtos.PagedResponseDTO
-import com.makkenzo.codehorizon.dtos.ReviewDTO
-import com.makkenzo.codehorizon.dtos.UpdateReviewRequestDTO
+import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.services.ReviewService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -43,6 +40,15 @@ class ReviewController(
 
         val reviewsPage = reviewService.getReviewsByCourseId(courseId, pageable)
         return ResponseEntity.ok(reviewsPage)
+    }
+
+    @GetMapping("/distribution")
+    @Operation(summary = "Получить распределение оценок для курса")
+    fun getRatingDistribution(
+        @PathVariable courseId: String
+    ): ResponseEntity<List<RatingDistributionDTO>> {
+        val distribution = reviewService.getRatingDistribution(courseId)
+        return ResponseEntity.ok(distribution)
     }
 
     @PostMapping

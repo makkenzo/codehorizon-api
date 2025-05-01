@@ -51,7 +51,8 @@ class SecurityConfig(
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/actuator/**",
-                        "/api/courses/{courseId}/reviews"
+                        "/api/courses/{courseId}/reviews",
+                        "/api/courses/{courseId}/reviews/distribution"
                     ).permitAll()
                     .anyRequest().authenticated()
             }
