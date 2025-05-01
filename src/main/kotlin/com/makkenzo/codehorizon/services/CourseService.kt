@@ -101,7 +101,15 @@ class CourseService(
             difficulty = course.difficulty,
             category = course.category,
             videoLength = course.videoLength,
-            lessons = course.lessons
+            lessons = course.lessons,
+            featuresBadge = course.featuresBadge,
+            featuresTitle = course.featuresTitle,
+            featuresSubtitle = course.featuresSubtitle,
+            featuresDescription = course.featuresDescription,
+            features = course.features,
+            benefitTitle = course.benefitTitle,
+            benefitDescription = course.benefitDescription,
+            testimonial = course.testimonial
         )
     }
 
@@ -123,7 +131,15 @@ class CourseService(
             category = request.category,
             imagePreview = request.imagePreview,
             videoPreview = request.videoPreview,
-            lessons = mutableListOf()
+            lessons = mutableListOf(),
+            featuresBadge = request.featuresBadge ?: "Ключевые темы",
+            featuresTitle = request.featuresTitle,
+            featuresSubtitle = request.featuresSubtitle,
+            featuresDescription = request.featuresDescription,
+            features = request.features ?: emptyList(),
+            benefitTitle = request.benefitTitle,
+            benefitDescription = request.benefitDescription,
+            testimonial = request.testimonial
         )
 
         val savedCourse = courseRepository.save(newCourse)
@@ -164,7 +180,15 @@ class CourseService(
             category = request.category,
             authorId = request.authorId,
             imagePreview = request.imagePreview,
-            videoPreview = request.videoPreview
+            videoPreview = request.videoPreview,
+            featuresBadge = request.featuresBadge ?: course.featuresBadge,
+            featuresTitle = request.featuresTitle ?: course.featuresTitle,
+            featuresSubtitle = request.featuresSubtitle ?: course.featuresSubtitle,
+            featuresDescription = request.featuresDescription ?: course.featuresDescription,
+            features = request.features ?: course.features,
+            benefitTitle = request.benefitTitle ?: course.benefitTitle,
+            benefitDescription = request.benefitDescription ?: course.benefitDescription,
+            testimonial = request.testimonial ?: course.testimonial
         )
 
         val savedCourse = courseRepository.save(updatedCourse)
@@ -329,45 +353,6 @@ class CourseService(
                 videoLength = doc.getDouble("videoLength") ?: 0.0
             )
         }
-    }
-
-
-    @CacheEvict(value = ["courses"], allEntries = true)
-    fun createCourse(
-        title: String,
-        description: String,
-        price: Double,
-        authorId: String,
-        category: String,
-        imagePreview: String?,
-        videoPreview: String?,
-        difficultyLevel: CourseDifficultyLevels
-    ): Course {
-        val author = userService.findById(authorId) ?: throw IllegalArgumentException("User not found")
-
-        if (!author.roles.contains("ADMIN")) {
-            throw AccessDeniedException("Only admins can create courses")
-        }
-
-        val slug = SlugUtils.generateUniqueSlug(title) { courseRepository.existsBySlug(it) }
-
-        val course = Course(
-            title = title,
-            slug = slug,
-            description = description,
-            authorId = authorId,
-            price = price,
-            imagePreview = imagePreview,
-            videoPreview = videoPreview,
-            difficulty = difficultyLevel,
-            category = category,
-        )
-        val savedCourse = courseRepository.save(course)
-
-        author.createdCourseIds.add(savedCourse.id!!)
-        userRepository.save(author)
-
-        return savedCourse
     }
 
     fun addLesson(courseId: String, lessonDto: LessonRequestDTO, authorId: String): Course {
