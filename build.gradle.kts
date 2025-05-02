@@ -48,6 +48,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.apache.commons:commons-imaging:1.0-alpha3")
     implementation("com.stripe:stripe-java:28.5.0-beta.1")
+    implementation("org.apache.tika:tika-core:2.9.2")
 }
 
 kotlin {

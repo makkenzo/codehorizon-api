@@ -431,7 +431,7 @@ class CourseService(
     }
 
 
-    @Cacheable("courses")
+    @Cacheable(value = ["courses"])
     fun getCourses(
         title: String?,
         description: String?,

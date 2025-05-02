@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.models
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
+import java.io.Serializable
 
 @Document(collection = "profiles")
 data class Profile(
@@ -14,4 +15,4 @@ data class Profile(
     val lastName: String? = null,
     val location: String? = null,
     val website: String? = null,
-)
+) : Serializable
