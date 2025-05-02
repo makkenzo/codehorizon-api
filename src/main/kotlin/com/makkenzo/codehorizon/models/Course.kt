@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.models
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
+import java.io.Serializable
 import java.time.Instant
 
 @Document(collection = "courses")
@@ -28,7 +29,7 @@ data class Course(
     val category: String? = null,
     val videoLength: Double? = 0.0,
 
-    val featuresBadge: String? = "Ключевые темы",
+    val featuresBadge: String? = null,
     val featuresTitle: String? = null,
     val featuresSubtitle: String? = null,
     val featuresDescription: String? = null,
@@ -47,11 +48,11 @@ enum class CourseDifficultyLevels {
     ADVANCED
 }
 
-data class FeatureItemData(val title: String, val description: String)
+data class FeatureItemData(val title: String, val description: String) : Serializable
 data class TestimonialData(
     val quote: String,
     val authorName: String,
     val authorTitle: String,
     val avatarSrc: String? = null,
-    val avatarFallback: String
-)
+    val avatarFallback: String? = null
+) : Serializable

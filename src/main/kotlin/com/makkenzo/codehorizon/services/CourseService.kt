@@ -426,7 +426,15 @@ class CourseService(
                     slug = it.slug ?: "",
                     title = it.title
                 )
-            }
+            },
+            featuresBadge = course.featuresBadge,
+            features = course.features,
+            featuresSubtitle = course.featuresSubtitle,
+            featuresTitle = course.featuresTitle,
+            featuresDescription = course.featuresDescription,
+            benefitTitle = course.benefitTitle,
+            benefitDescription = course.benefitDescription,
+            testimonial = course.testimonial,
         )
     }
 
