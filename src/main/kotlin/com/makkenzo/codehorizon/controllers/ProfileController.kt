@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -37,7 +38,7 @@ class ProfileController(
         security = [SecurityRequirement(name = "bearerAuth")]
     )
     fun updateProfile(
-        @RequestBody profile: UpdateProfileDTO,
+        @Valid @RequestBody profile: UpdateProfileDTO,
         request: HttpServletRequest
     ): ResponseEntity<Profile> {
         val token = request.cookies?.find { it.name == "access_token" }?.value

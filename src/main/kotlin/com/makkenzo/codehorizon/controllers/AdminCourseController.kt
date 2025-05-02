@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -53,7 +54,7 @@ class AdminCourseController(private val courseService: CourseService) {
 
     @PostMapping
     @Operation(summary = "Создать новый курс (Admin)")
-    fun createCourse(@RequestBody request: AdminCreateUpdateCourseRequestDTO): ResponseEntity<AdminCourseDetailDTO> {
+    fun createCourse(@Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO): ResponseEntity<AdminCourseDetailDTO> {
         val newCourse = courseService.createCourseAdmin(request)
         return ResponseEntity.status(HttpStatus.CREATED).body(newCourse)
     }
@@ -62,7 +63,7 @@ class AdminCourseController(private val courseService: CourseService) {
     @Operation(summary = "Обновить курс (Admin)")
     fun updateCourse(
         @PathVariable courseId: String,
-        @RequestBody request: AdminCreateUpdateCourseRequestDTO
+        @Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
         val updatedCourse = courseService.updateCourseAdmin(courseId, request)
         return ResponseEntity.ok(updatedCourse)
@@ -79,7 +80,7 @@ class AdminCourseController(private val courseService: CourseService) {
     @Operation(summary = "Добавить урок в курс (Admin)")
     fun addLesson(
         @PathVariable courseId: String,
-        @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
+        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
         val updatedCourse = courseService.addLessonAdmin(courseId, lessonDto)
         return ResponseEntity.status(HttpStatus.CREATED).body(updatedCourse)
@@ -90,7 +91,7 @@ class AdminCourseController(private val courseService: CourseService) {
     fun updateLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
-        @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
+        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
         val updatedCourse = courseService.updateLessonAdmin(courseId, lessonId, lessonDto)
         return ResponseEntity.ok(updatedCourse)

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -55,7 +56,7 @@ class ReviewController(
     @Operation(summary = "Создать отзыв для курса", security = [SecurityRequirement(name = "bearerAuth")])
     fun createReview(
         @PathVariable courseId: String,
-        @RequestBody reviewDto: CreateReviewRequestDTO,
+        @Valid @RequestBody reviewDto: CreateReviewRequestDTO,
         request: HttpServletRequest
     ): ResponseEntity<ReviewDTO> {
         val token = request.cookies?.find { it.name == "access_token" }?.value
@@ -71,7 +72,7 @@ class ReviewController(
     fun updateReview(
         @PathVariable courseId: String,
         @PathVariable reviewId: String,
-        @RequestBody reviewDto: UpdateReviewRequestDTO,
+        @Valid @RequestBody reviewDto: UpdateReviewRequestDTO,
         request: HttpServletRequest
     ): ResponseEntity<ReviewDTO> {
         val token = request.cookies?.find { it.name == "access_token" }?.value ?: throw IllegalArgumentException("...")

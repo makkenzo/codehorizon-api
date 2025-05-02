@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
@@ -30,7 +31,7 @@ class AuthController(
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
-    fun register(@RequestBody request: RegisterRequestDTO): ResponseEntity<MessageResponseDTO> {
+    fun register(@Valid @RequestBody request: RegisterRequestDTO): ResponseEntity<MessageResponseDTO> {
         return try {
             val user =
                 userService.registerUser(request.username, request.email, request.password, request.confirmPassword)
@@ -45,7 +46,7 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Аутентификация пользователя")
-    fun login(@RequestBody request: LoginRequestDTO): ResponseEntity<Void> {
+    fun login(@Valid @RequestBody request: LoginRequestDTO): ResponseEntity<Void> {
         val user = userService.authenticateUser(request.login, request.password)
         return if (user != null) {
             val accessToken = jwtUtils.generateAccessToken(user)
@@ -157,7 +158,7 @@ class AuthController(
 
     @PostMapping("/reset-password/check-login")
     @Operation(summary = "Поиск логина для сброса пароля", security = [SecurityRequirement(name = "bearerAuth")])
-    fun checkLoginValidity(@RequestBody request: CheckLoginRequestDTO): ResponseEntity<MessageResponseDTO> {
+    fun checkLoginValidity(@Valid @RequestBody request: CheckLoginRequestDTO): ResponseEntity<MessageResponseDTO> {
         val user = userService.findByLogin(request.login) ?: return ResponseEntity.notFound().build()
 
         emailService.sendVerificationEmail(user, MailActionEnum.RESET_PASSWORD)
@@ -167,7 +168,10 @@ class AuthController(
 
     @PostMapping("/reset-password")
     @Operation(summary = "Сброс пароля", security = [SecurityRequirement(name = "bearerAuth")])
-    fun resetPassword(@RequestBody body: ResetPasswordRequestDTO, request: HttpServletRequest): ResponseEntity<User> {
+    fun resetPassword(
+        @Valid @RequestBody body: ResetPasswordRequestDTO,
+        request: HttpServletRequest
+    ): ResponseEntity<User> {
         val header = request.getHeader("Authorization")
             ?: throw IllegalArgumentException("Authorization header is missing")
         val token = header.substring(7).trim()
