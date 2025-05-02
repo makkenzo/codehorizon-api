@@ -38,7 +38,8 @@ class CourseService(
     private val userService: UserService,
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate,
-    private val courseProgressRepository: CourseProgressRepository
+    private val courseProgressRepository: CourseProgressRepository,
+    private val mediaProcessingService: MediaProcessingService
 ) {
     fun findAllCoursesAdmin(pageable: Pageable, titleSearch: String?): PagedResponseDTO<AdminCourseListItemDTO> {
         val criteria = Criteria()
@@ -113,6 +114,7 @@ class CourseService(
         )
     }
 
+    @Cacheable("distinctCategories")
     fun getDistinctCategories(): List<String> {
         val query = Query().addCriteria(Criteria.where("category").ne(null).ne(""))
         val categories = mongoTemplate.findDistinct(query, "category", Course::class.java, String::class.java)
@@ -198,10 +200,13 @@ class CourseService(
         )
 
         val savedCourse = courseRepository.save(updatedCourse)
+
+        mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
+
         return getCourseDetailsAdmin(savedCourse.id!!)
     }
 
-    @CacheEvict(value = ["courses"], allEntries = true)
+    @CacheEvict(value = ["courses"], key = "#courseId")
     fun deleteCourseAdmin(courseId: String) {
         val course = courseRepository.findById(courseId)
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
@@ -377,10 +382,12 @@ class CourseService(
         return courseRepository.findByAuthorId(authorId)
     }
 
+    @Cacheable(value = ["courses"], key = "#courseId")
     fun getCourseById(courseId: String): Course {
         return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
     }
 
+    @Cacheable(value = ["courses"], key = "#slug")
     fun getCourseBySlug(slug: String): CourseWithoutContentDTO {
         val course = courseRepository.findBySlug(slug) ?: throw NotFoundException("Course not found with slug: $slug")
 
@@ -476,22 +483,13 @@ class CourseService(
             "difficulty",
             "category",
             "videoLength",
+            "createdAt"
         )
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.firstName").elementAt(0)).`as`("authorFirstName")
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorProfile.lastName").elementAt(0)).`as`("authorLastName")
             .and(ArrayOperators.ArrayElemAt.arrayOf("\$authorUser.username").elementAt(0)).`as`("authorUsername")
             .and(ToString.toString("_id")).`as`("id")
 
-
-        // Определяем сортировку
-        val sort = when (sortBy) {
-            "price_asc" -> Sort.by("price").ascending()
-            "price_desc" -> Sort.by("price").descending()
-            "popular" -> Sort.by("rating").descending()
-            else -> Sort.unsorted()
-        }
-
-        // Создаем список операций агрегации
         val aggregationOperations = mutableListOf<AggregationOperation>()
 
         aggregationOperations.add(matchStage)
@@ -499,13 +497,20 @@ class CourseService(
         aggregationOperations.add(addFieldsStage)
         aggregationOperations.add(lookupUsersStage)
         aggregationOperations.add(projectStage)
-        // Добавляем стадию сортировки только если она не пустая
-        if (sort.isSorted) {
-            aggregationOperations.add(Aggregation.sort(sort))
+
+        when (sortBy?.lowercase()) {
+            "price_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "price"))
+            "price_desc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "price"))
+            "popular" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "rating"))
+            "date_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "createdAt"))
+            "date_desc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "createdAt"))
+            "title_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "title"))
+            "title_desc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "title"))
+            else -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "createdAt"))
         }
-        // Пагинация: пропустить и ограничить
-        val pageNumber = if (pageable.pageNumber > 0) pageable.pageNumber - 1 else 0
-        aggregationOperations.add(Aggregation.skip((pageNumber * pageable.pageSize).toLong()))
+
+        val pageNumberForSkip = if (pageable.pageNumber > 0) pageable.pageNumber else 0
+        aggregationOperations.add(Aggregation.skip((pageNumberForSkip * pageable.pageSize).toLong()))
         aggregationOperations.add(Aggregation.limit(pageable.pageSize.toLong()))
 
         val aggregation = Aggregation.newAggregation(aggregationOperations)
@@ -539,19 +544,28 @@ class CourseService(
             )
         }
 
-        // Отдельная агрегация для подсчета общего количества документов
         val countAggregation = Aggregation.newAggregation(
             matchStage,
             Aggregation.count().`as`("total")
         )
         val countResult = mongoTemplate.aggregate(countAggregation, "courses", Document::class.java)
         val totalElements = if (countResult.mappedResults.isNotEmpty()) {
-            countResult.mappedResults[0].getInteger("total").toLong()
+            countResult.mappedResults[0].getInteger("total", 0).toLong()
         } else {
             0L
         }
-        val totalPages =
+
+        val totalPages = if (pageable.pageSize > 0) {
             (totalElements / pageable.pageSize).toInt() + if (totalElements % pageable.pageSize > 0) 1 else 0
+        } else {
+            0
+        }
+
+        val isLastPage = if (pageable.pageSize > 0) {
+            pageNumberForSkip >= totalPages - 1
+        } else {
+            true
+        }
 
         return PagedResponseDTO(
             content = coursesDTO,
@@ -559,7 +573,7 @@ class CourseService(
             pageSize = pageable.pageSize,
             totalElements = totalElements,
             totalPages = totalPages,
-            isLast = pageable.pageNumber >= totalPages - 1
+            isLast = isLastPage
         )
     }
 
@@ -568,61 +582,10 @@ class CourseService(
         return course.lessons
     }
 
-
     fun getLessonById(courseId: String, lessonId: String): Lesson {
         val course = getCourseById(courseId)
         return course.lessons.find { it.id == lessonId }
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
-    }
-
-    fun updateCourse(courseId: String, title: String, description: String, price: Double, authorId: String): Course {
-        val course = getCourseById(courseId)
-        if (course.authorId != authorId) {
-            throw AccessDeniedException("Only the author can update the course")
-        }
-        course.title = title
-        course.description = description
-        course.price = price
-        return courseRepository.save(course)
-    }
-
-    fun updateLesson(courseId: String, lessonId: String, updatedLesson: LessonRequestDTO, authorId: String): Course {
-        val course = getCourseById(courseId)
-        if (course.authorId != authorId) {
-            throw AccessDeniedException("Only the author can update the course")
-        }
-        val lesson =
-            course.lessons.find { it.id == lessonId } ?: throw NotFoundException("Lesson not found with id: $lessonId")
-
-        lesson.title = updatedLesson.title
-        lesson.content = updatedLesson.content
-        lesson.tasks = updatedLesson.tasks
-        lesson.codeExamples = updatedLesson.codeExamples
-
-        return courseRepository.save(course)
-    }
-
-    fun deleteLesson(courseId: String, lessonId: String, authorId: String): Course {
-        val course = getCourseById(courseId)
-        if (course.authorId != authorId) {
-            throw AccessDeniedException("Only the author can update the course")
-        }
-        val lesson =
-            course.lessons.find { it.id == lessonId } ?: throw NotFoundException("Lesson not found with id: $lessonId")
-        course.lessons.remove(lesson)
-        return courseRepository.save(course)
-    }
-
-    fun updateAllCoursesVideoLength() {
-        val courses = courseRepository.findAll()
-
-        for (course in courses) {
-            val totalLength = calculateTotalVideoLength(course)
-            val updatedCourse = course.copy(videoLength = totalLength)
-
-            courseRepository.save(updatedCourse)
-            println("✅ Обновлён курс '${course.title}' — общая длина видео: ${totalLength}s")
-        }
     }
 
     fun calculateTotalVideoLength(course: Course): Double {

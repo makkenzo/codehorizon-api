@@ -1,5 +1,7 @@
 package com.makkenzo.codehorizon.dtos
 
+import java.io.Serializable
+
 data class ProfileDTO(
     val avatarUrl: String? = null,
     val avatarColor: String? = null,
@@ -8,4 +10,4 @@ data class ProfileDTO(
     val lastName: String? = null,
     val location: String? = null,
     val website: String? = null,
-)
+) : Serializable

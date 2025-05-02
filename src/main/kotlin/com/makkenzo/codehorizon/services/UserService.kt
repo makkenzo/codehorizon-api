@@ -7,6 +7,7 @@ import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -170,6 +171,7 @@ class UserService(
         return userRepository.findByUsernameOrEmail(login, login)
     }
 
+    @Cacheable(value = ["userProfiles"], key = "#username")
     fun getProfileByUsername(username: String): UserProfileDTO {
         val user = userRepository.findByUsername(username) ?: throw ResponseStatusException(
             HttpStatus.NOT_FOUND, "Профиль с таким юзернеймом не найден"

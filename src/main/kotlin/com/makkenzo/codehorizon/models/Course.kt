@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.models
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
 
@@ -8,16 +9,22 @@ import java.time.Instant
 data class Course(
     @Id val id: String? = null,
     var title: String,
+    @Indexed(unique = true)
     var slug: String,
     var description: String? = null,
     val imagePreview: String? = null,
     val videoPreview: String? = null,
+    @Indexed
     val authorId: String,
     var lessons: MutableList<Lesson> = mutableListOf(),
+    @Indexed
     var rating: Double = 0.0,
+    @Indexed
     var price: Double = 0.0,
     var discount: Double = 0.0,
+    @Indexed
     val difficulty: CourseDifficultyLevels,
+    @Indexed
     val category: String? = null,
     val videoLength: Double? = 0.0,
 
@@ -30,6 +37,7 @@ data class Course(
     val benefitDescription: String? = null,
     val testimonial: TestimonialData? = null,
 
+    @Indexed
     val createdAt: Instant = Instant.now()
 )
 

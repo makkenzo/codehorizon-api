@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.dtos
 
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
+import java.io.Serializable
 
 data class CourseWithoutContentDTO(
     val id: String,
@@ -18,9 +19,9 @@ data class CourseWithoutContentDTO(
     val difficulty: CourseDifficultyLevels,
     val category: String?,
     val videoLength: Double?
-)
+) : Serializable
 
 data class LessonWithoutContent(
     val slug: String,
     val title: String
-)
+) : Serializable

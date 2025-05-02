@@ -5,6 +5,7 @@ import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Review
 import com.makkenzo.codehorizon.repositories.*
 import org.bson.Document
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -28,6 +29,7 @@ class ReviewService(
     private val mongoTemplate: MongoTemplate
 ) {
     @Transactional
+    @CacheEvict(value = ["courses"], key = "#courseId")
     fun createReview(courseId: String, authorId: String, dto: CreateReviewRequestDTO): ReviewDTO {
         if (!courseProgressRepository.existsByUserIdAndCourseId(
                 authorId,
