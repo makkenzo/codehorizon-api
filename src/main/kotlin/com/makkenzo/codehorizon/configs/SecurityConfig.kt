@@ -37,25 +37,22 @@ class SecurityConfig(
             .sessionManagement { session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { requests ->
                 requests
-                    .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .requestMatchers(
-                        "/api/auth/login",
-                        "/api/auth/register",
-                        "/api/auth/refresh-token",
-                        "/api/auth/reset-password/**",
-                        "/api/verify",
+                        "/api/auth/**",
+                        "/api/verify/**",
                         "/api/courses",
                         "/api/courses/{slug}",
+                        "/api/courses/categories",
+                        "/api/courses/{courseId}/reviews",
+                        "/api/courses/{courseId}/reviews/distribution",
                         "/api/users/{username}/profile",
                         "/api/users/popular-authors",
                         "/api/payments/stripe/webhook",
-                        "/v3/api-docs/**",
-                        "/swagger-ui/**",
-                        "/actuator/**",
-                        "/api/courses/{courseId}/reviews",
-                        "/api/courses/{courseId}/reviews/distribution"
+                        "/swagger-ui/**", "/v3/api-docs/**"
                     ).permitAll()
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
+
             }
             .exceptionHandling { exceptions ->
                 exceptions

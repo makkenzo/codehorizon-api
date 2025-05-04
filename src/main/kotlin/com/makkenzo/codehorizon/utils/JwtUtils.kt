@@ -84,4 +84,9 @@ class JwtUtils(private val tokenBlacklistService: TokenBlacklistService) {
             Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body["action"] as String
         return MailActionEnum.valueOf(action)
     }
+
+    fun getRolesFromToken(token: String): List<String> {
+        val claims = Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token).body
+        return claims.get("roles", List::class.java) as? List<String> ?: emptyList()
+    }
 }
