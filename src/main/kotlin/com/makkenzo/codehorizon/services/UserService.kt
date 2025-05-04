@@ -57,11 +57,12 @@ class UserService(
         val user = userRepository.findById(userId)
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
 
+        val newRoles = request.roles?.map { role ->
+            if (role.startsWith("ROLE_")) role else "ROLE_$role"
+        }?.distinct() ?: user.roles
+
         val updatedUser = user.copy(
-            roles = request.roles?.map { role ->
-                if (role.startsWith("ROLE_")) role else "ROLE_$role"
-            }?.distinct()
-                ?: user.roles,
+            roles = newRoles.filter { it.isNotBlank() },
             isVerified = request.isVerified ?: user.isVerified
         )
 
