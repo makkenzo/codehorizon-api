@@ -13,6 +13,7 @@ import com.makkenzo.codehorizon.utils.SlugUtils
 import com.mongodb.client.model.Filters
 import org.bson.Document
 import org.bson.types.ObjectId
+import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageImpl
@@ -42,6 +43,8 @@ class CourseService(
     private val courseProgressRepository: CourseProgressRepository,
     private val mediaProcessingService: MediaProcessingService
 ) {
+
+
     fun findAllCoursesAdmin(
         pageable: Pageable,
         titleSearch: String?,
@@ -445,17 +448,7 @@ class CourseService(
         return course.lessons.find { it.id == lessonId }
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
-
-    fun calculateTotalVideoLength(course: Course): Double {
-        val videoUrls = mutableListOf<String>()
-
-        course.videoPreview?.let { videoUrls.add(it) }
-
-        videoUrls.addAll(course.lessons.mapNotNull { it.mainAttachment })
-
-        return videoUrls.sumOf { MediaUtils.getVideoDuration(it) }
-    }
-
+    
     fun getFullCourseForLearning(courseId: String, userId: String): Course {
         val progressExists = courseProgressRepository.findByUserIdAndCourseId(userId, courseId) != null
 
