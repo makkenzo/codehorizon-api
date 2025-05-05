@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.models
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
+import java.io.Serializable
 import java.time.LocalDateTime
 
 @Document(collection = "purchases")
@@ -13,4 +14,4 @@ data class Purchase(
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val amount: Long,
     val currency: String
-)
+) : Serializable

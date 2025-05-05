@@ -1,5 +1,7 @@
 package com.makkenzo.codehorizon.models
 
+import java.io.Serializable
+
 
 data class Lesson(
     val id: String? = null,
@@ -10,4 +12,4 @@ data class Lesson(
     var tasks: List<Task> = emptyList(),
     var attachments: List<Attachment> = emptyList(),
     var mainAttachment: String? = null
-)
+) : Serializable

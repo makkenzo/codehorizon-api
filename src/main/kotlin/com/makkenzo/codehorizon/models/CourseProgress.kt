@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.models
 
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
+import java.io.Serializable
 import java.time.Instant
 
 @Document(collection = "course_progress")
@@ -12,4 +13,4 @@ data class CourseProgress(
     val completedLessons: List<String> = emptyList(),
     val progress: Double = 0.0,
     val lastUpdated: Instant = Instant.now()
-)
+) : Serializable

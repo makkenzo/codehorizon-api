@@ -40,7 +40,7 @@ data class Course(
 
     @Indexed
     val createdAt: Instant = Instant.now()
-)
+) : Serializable
 
 enum class CourseDifficultyLevels {
     BEGINNER,
