@@ -390,15 +390,15 @@ class CourseService(
                 imagePreview = doc.getString("imagePreview"),
                 videoPreview = doc.getString("videoPreview"),
                 authorId = doc.getString("authorId") ?: "",
-                rating = doc.getDouble("rating") ?: 0.0,
-                price = doc.getDouble("price") ?: 0.0,
-                discount = doc.getDouble("discount") ?: 0.0,
+                rating = doc.get("rating", Number::class.java)?.toDouble() ?: 0.0,
+                price = doc.get("price", Number::class.java)?.toDouble() ?: 0.0,
+                discount = doc.get("discount", Number::class.java)?.toDouble() ?: 0.0,
                 difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
                     ?: CourseDifficultyLevels.BEGINNER,
                 authorName = authorName,
                 authorUsername = authorUsername,
                 category = doc.getString("category") ?: "Без категории",
-                videoLength = doc.getDouble("videoLength") ?: 0.0
+                videoLength = doc.get("videoLength", Number::class.java)?.toDouble() ?: 0.0
             )
         }
 
