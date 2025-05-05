@@ -2,7 +2,7 @@ package com.makkenzo.codehorizon.models
 
 
 data class Lesson(
-    val id: String,
+    val id: String? = null,
     var title: String,
     var slug: String? = null,
     var content: String? = null,
