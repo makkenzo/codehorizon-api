@@ -1,8 +1,8 @@
 package com.makkenzo.codehorizon.services
 
-import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.utils.MediaUtils
+import org.bson.Document
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
@@ -41,7 +41,8 @@ class MediaProcessingService(
                 }
             }
 
-            if (course.videoLength != totalLength) {
+            val currentLength = course.videoLength ?: 0.0
+            if (currentLength != totalLength) {
                 val updatedCourse = course.copy(videoLength = totalLength)
                 courseRepository.save(updatedCourse)
                 logger.info(
@@ -73,26 +74,24 @@ class MediaProcessingService(
 
             query.fields().include("_id")
 
-            val coursesToUpdate = mongoTemplate.find(query, Course::class.java)
+            val coursesToUpdateDocs = mongoTemplate.find(query, Document::class.java, "courses")
+            val courseIdsToUpdate = coursesToUpdateDocs.mapNotNull { it.getObjectId("_id")?.toString() }
 
-            if (coursesToUpdate.isEmpty()) {
+            if (courseIdsToUpdate.isEmpty()) {
                 logger.info("Не найдено курсов, требующих обновления длительности видео.")
                 return
             }
 
             logger.info(
                 "Найдено {} курсов для обновления длительности видео. Запускаем асинхронные задачи...",
-                coursesToUpdate.size
+                courseIdsToUpdate.size
             )
 
-            coursesToUpdate.forEach { course ->
-                course.id?.let {
-                    updateCourseVideoLengthAsync(it)
-                } ?: logger.warn("Обнаружен курс без ID в результатах запроса, пропуск.")
+            courseIdsToUpdate.forEach { courseId ->
+                updateCourseVideoLengthAsync(courseId)
             }
 
             logger.info("Все асинхронные задачи для обновления длительности видео запущены.")
-
         } catch (e: Exception) {
             logger.error("Ошибка при поиске курсов для обновления длительности видео: {}", e.message, e)
         }
