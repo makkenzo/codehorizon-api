@@ -11,5 +11,6 @@ data class AdminCourseListItemDTO(
     val discount: Double,
     val difficulty: CourseDifficultyLevels,
     val category: String?,
-    val lessonCount: Int
+    val lessonCount: Int,
+    val imagePreview: String? = null
 )

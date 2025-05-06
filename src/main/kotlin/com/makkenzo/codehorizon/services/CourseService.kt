@@ -72,7 +72,8 @@ class CourseService(
                 discount = course.discount,
                 difficulty = course.difficulty,
                 category = course.category,
-                lessonCount = course.lessons.size
+                lessonCount = course.lessons.size,
+                imagePreview = course.imagePreview
             )
         }
 
