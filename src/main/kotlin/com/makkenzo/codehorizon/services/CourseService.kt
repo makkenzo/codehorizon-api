@@ -8,12 +8,10 @@ import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
-import com.makkenzo.codehorizon.utils.MediaUtils
 import com.makkenzo.codehorizon.utils.SlugUtils
 import com.mongodb.client.model.Filters
 import org.bson.Document
 import org.bson.types.ObjectId
-import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.PageImpl
@@ -312,11 +310,19 @@ class CourseService(
         category?.let { criteria.add(Criteria.where("category").`in`(it)) }
         difficulty?.let { criteria.add(Criteria.where("difficulty").`in`(it)) }
 
+        val minDurationInSeconds = minDuration?.let { it * 3600 }
+        val maxDurationInSeconds = maxDuration?.let { it * 3600 }
+
         val durationCriteria = mutableListOf<Criteria>()
-        minDuration?.let { durationCriteria.add(Criteria.where("videoLength").gte(it)) }
-        maxDuration?.let { durationCriteria.add(Criteria.where("videoLength").lte(it)) }
+        minDurationInSeconds?.let { durationCriteria.add(Criteria.where("videoLength").gte(it)) }
+        maxDurationInSeconds?.let { durationCriteria.add(Criteria.where("videoLength").lte(it)) }
+
         if (durationCriteria.isNotEmpty()) {
-            criteria.add(Criteria().andOperator(*durationCriteria.toTypedArray()))
+            if (durationCriteria.size == 1) {
+                criteria.add(durationCriteria[0])
+            } else {
+                criteria.add(Criteria().andOperator(*durationCriteria.toTypedArray()))
+            }
         }
 
         val finalCriteria = if (criteria.isNotEmpty()) Criteria().andOperator(*criteria.toTypedArray()) else Criteria()
@@ -448,7 +454,7 @@ class CourseService(
         return course.lessons.find { it.id == lessonId }
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
-    
+
     fun getFullCourseForLearning(courseId: String, userId: String): Course {
         val progressExists = courseProgressRepository.findByUserIdAndCourseId(userId, courseId) != null
 

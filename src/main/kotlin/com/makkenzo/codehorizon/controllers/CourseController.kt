@@ -44,10 +44,10 @@ class CourseController(
         @RequestParam(required = false) category: List<String>?,
         @RequestParam(required = false) difficulty: List<CourseDifficultyLevels>?,
         @RequestParam(required = false) sortBy: String?,
-        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int
     ): ResponseEntity<PagedResponseDTO<CourseDTO>> {
-        val pageable: Pageable = PageRequest.of(page, size)
+        val pageable: Pageable = PageRequest.of(page - 1, size)
 
         val courses = courseService.getCourses(
             title, description, minRating, minDuration, maxDuration, category, difficulty, sortBy, pageable
