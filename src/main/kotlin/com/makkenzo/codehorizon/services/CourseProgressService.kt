@@ -7,8 +7,10 @@ import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Service
@@ -16,8 +18,11 @@ class CourseProgressService(
     private val courseProgressRepository: CourseProgressRepository,
     private val userRepository: UserRepository,
     private val courseService: CourseService,
-    private val courseRepository: CourseRepository
+    private val courseRepository: CourseRepository,
+    private val certificateService: CertificateService
 ) {
+    private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
+
     fun addCourseProgress(userId: String, courseId: String): CourseProgress {
         val doc = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
 
@@ -57,6 +62,7 @@ class CourseProgressService(
         return progress?.progress
     }
 
+    @Transactional
     fun markLessonAsComplete(userId: String, courseId: String, lessonId: String): CourseProgress {
         val courseProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
             ?: throw NotFoundException("Прогресс для пользователя $userId и курса $courseId не найден. Возможно, нет доступа?")
@@ -81,7 +87,28 @@ class CourseProgressService(
             lastUpdated = Instant.now()
         )
 
-        return courseProgressRepository.save(updatedProgress)
+        val savedProgress = courseProgressRepository.save(updatedProgress)
+
+        if (savedProgress.progress >= 100.0) {
+            logger.info(
+                "Прогресс курса {} для пользователя {} достиг 100%. Попытка создания сертификата.",
+                courseId,
+                userId
+            )
+            try {
+                certificateService.createCertificateRecord(userId, courseId)
+            } catch (e: Exception) {
+                logger.error(
+                    "Не удалось создать запись о сертификате для курса {} пользователя {}: {}",
+                    courseId,
+                    userId,
+                    e.message,
+                    e
+                )
+            }
+        }
+
+        return savedProgress
     }
 
     fun getUserProgressByCourse(userId: String, courseId: String): CourseProgress? {

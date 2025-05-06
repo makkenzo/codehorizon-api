@@ -4,7 +4,7 @@ import java.io.Serializable
 
 
 data class Lesson(
-    val id: String? = null,
+    val id: String,
     var title: String,
     var slug: String? = null,
     var content: String? = null,

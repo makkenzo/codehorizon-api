@@ -49,6 +49,9 @@ dependencies {
     implementation("org.apache.commons:commons-imaging:1.0-alpha3")
     implementation("com.stripe:stripe-java:28.5.0-beta.1")
     implementation("org.apache.tika:tika-core:2.9.2")
+    implementation("com.itextpdf:kernel:9.1.0")
+    implementation("com.itextpdf:html2pdf:6.1.0")
+    implementation("com.itextpdf:font-asian:9.1.0")
 }
 
 kotlin {
