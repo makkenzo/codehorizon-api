@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.CertificateDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Certificate
+import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CertificateRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
@@ -68,11 +69,14 @@ class CertificateService(
         }
 
         var instructorDisplayName: String? = "Инструктор Курса"
+        var instructorSigUrl: String? = null
         val courseAuthorUser: User? = userRepository.findById(course.authorId).orElse(null)
+
         if (courseAuthorUser != null) {
-            val instructorProfile = profileRepository.findByUserId(courseAuthorUser.id!!)
+            val instructorProfile: Profile? = profileRepository.findByUserId(courseAuthorUser.id!!)
             instructorDisplayName = when {
                 instructorProfile != null -> {
+                    instructorSigUrl = instructorProfile.signatureUrl
                     when {
                         !instructorProfile.firstName.isNullOrBlank() && !instructorProfile.lastName.isNullOrBlank() ->
                             "${instructorProfile.firstName} ${instructorProfile.lastName}"
@@ -96,6 +100,7 @@ class CertificateService(
             userName = studentName,
             uniqueCertificateId = generateFriendlyCertificateId(),
             instructorName = instructorDisplayName,
+            instructorSignatureUrl = instructorSigUrl,
             category = course.category
         )
 
@@ -113,11 +118,12 @@ class CertificateService(
         }
 
         logger.info(
-            "Создан сертификат ID: {} для пользователя {} и курса {}. Инструктор: {}",
+            "Создан сертификат ID: {} для пользователя {} и курса {}. Инструктор: {}, URL подписи: {}",
             savedCertificate.uniqueCertificateId,
             userId,
             courseId,
-            savedCertificate.instructorName ?: "N/A"
+            savedCertificate.instructorName ?: "N/A",
+            savedCertificate.instructorSignatureUrl ?: "N/A"
         )
         return savedCertificate
     }

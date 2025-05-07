@@ -52,7 +52,8 @@ class ProfileService(private val profileRepository: ProfileRepository) {
             firstName = updatedProfileDTO.firstName ?: existingProfile.firstName,
             lastName = updatedProfileDTO.lastName ?: existingProfile.lastName,
             location = updatedProfileDTO.location ?: existingProfile.location,
-            website = updatedProfileDTO.website ?: existingProfile.website
+            website = updatedProfileDTO.website ?: existingProfile.website,
+            signatureUrl = updatedProfileDTO.signatureUrl
         )
 
         val savedProfile = profileRepository.save(profileToUpdate)

@@ -22,7 +22,7 @@
                 padding: 0;
                 color: #374151;
                 background-color: #f9fafb;
-                line-height: 1.1;
+                line-height: 1;
             }
 
             .certificate-container {
@@ -47,20 +47,24 @@
                 display: block;
                 overflow: hidden;
             }
+
             .certificate-content {
                 text-align: center;
                 position: relative;
                 z-index: 1;
             }
+
             .logo-container {
                 margin-bottom: 24px;
                 text-align: center;
             }
+
             .logo {
                 height: 64px;
                 border-radius: 100%;
                 display: inline-block;
             }
+
             .certificate-title {
                 font-size: 24pt;
                 font-weight: bold;
@@ -68,69 +72,82 @@
                 color: #111827;
                 margin-bottom: 8px;
             }
+
             .decorative-line {
                 height: 4px;
                 width: 128px;
                 background-color: #3dcbb1;
                 margin: 0 auto 24px auto;
             }
+
             .text-lg {
                 font-size: 14pt;
                 color: #4b5563;
+
                 margin-bottom: 8px;
             }
             .text-sm {
                 font-size: 10pt;
                 color: #6b7280;
             }
+
             .recipient-name {
                 font-size: 30pt;
                 font-weight: bold;
                 color: #3dcbb1;
                 margin-bottom: 24px;
             }
+
             .course-title {
                 font-size: 22pt;
                 font-weight: 600;
                 color: #1f2937;
                 margin-bottom: 24px;
             }
+
             .completion-date {
                 margin-bottom: 32px;
             }
+
             .completion-date span {
                 font-weight: 600;
             }
+
             .signatures-section {
-                margin-bottom: 32px;
+                margin-bottom: 4px;
                 width: 100%;
             }
+
             .signatures-table {
                 width: 100%;
                 border-spacing: 20px 0;
             }
+
             .signature-block {
                 text-align: center;
                 vertical-align: bottom;
                 width: 50%;
             }
+
             .signature-line {
                 height: 1px;
                 width: 160px;
                 background-color: #9ca3af;
                 margin: 0 auto 8px auto;
             }
+
             .signature-name {
                 color: #374151;
                 font-size: 11pt;
             }
+
             .signature-title {
                 font-size: 10pt;
                 color: #6b7280;
             }
 
             .footer-section {
-                margin-top: 16px;
+                margin-top: 0px;
                 background-color: #f9fafb;
                 padding: 16px;
                 border-radius: 8px;
@@ -190,6 +207,19 @@
                 z-index: 0;
                 transform: translate(50%, 50%);
             }
+            .signature-image-container {
+                width: 160px;
+                height: 60px;
+                margin: 0 auto 4px auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .signature-image {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+            }
         </style>
     </head>
     <body>
@@ -228,13 +258,27 @@
                         <table class="signatures-table">
                             <tr>
                                 <td class="signature-block">
+                                    <div th:if="${codehorizonSignatureUrl}" class="signature-image-container">
+                                        <img
+                                            th:src="${codehorizonSignatureUrl}"
+                                            alt="Подпись CodeHorizon"
+                                            class="signature-image"
+                                        />
+                                    </div>
                                     <div class="signature-line"></div>
                                     <p class="signature-name">CodeHorizon</p>
                                     <p class="signature-title">Платформа Обучения</p>
                                 </td>
                                 <td class="signature-block">
+                                    <div th:if="${instructorSignatureUrl}" class="signature-image-container">
+                                        <img
+                                            th:src="${instructorSignatureUrl}"
+                                            alt="Подпись инструктора"
+                                            class="signature-image"
+                                        />
+                                    </div>
                                     <div class="signature-line"></div>
-                                    <p class="signature-name" th:text="${instructorName}">Инструктор Курса</p>
+                                    <p class="signature-name" th:text="${instructorName}">Имя Фамилия</p>
                                     <p class="signature-title">Инструктор Курса</p>
                                 </td>
                             </tr>

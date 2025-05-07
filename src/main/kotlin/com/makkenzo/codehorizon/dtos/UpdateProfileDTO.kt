@@ -19,4 +19,6 @@ data class UpdateProfileDTO(
 
     @field:Size(max = 255, message = "URL веб-сайта не должен превышать 255 символов")
     val website: String? = null,
+    
+    val signatureUrl: String? = null
 )

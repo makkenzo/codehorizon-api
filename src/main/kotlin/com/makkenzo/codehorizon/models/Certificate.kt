@@ -17,5 +17,6 @@ data class Certificate(
     val uniqueCertificateId: String,
     val completionDate: Instant = Instant.now(),
     var instructorName: String? = null,
+    var instructorSignatureUrl: String? = null,
     val category: String? = null
 )
