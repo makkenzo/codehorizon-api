@@ -130,9 +130,18 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
-    fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
+    fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO, creatorUserId: String): AdminCourseDetailDTO {
         val author = userRepository.findById(request.authorId)
             .orElseThrow { ResponseStatusException(HttpStatus.BAD_REQUEST, "Автор с ID ${request.authorId} не найден") }
+
+        val creatorUser = userRepository.findById(creatorUserId).orElseThrow {
+            ResponseStatusException(HttpStatus.BAD_REQUEST, "Пользователь с ID $creatorUserId не найден")
+        }
+        if (creatorUser.roles.contains("ROLE_MENTOR") && !creatorUser.roles.contains("ROLE_ADMIN")) {
+            if (request.authorId != creatorUserId) {
+                throw AccessDeniedException("Внутренняя ошибка: Менторы могут создавать курсы только от своего имени.")
+            }
+        }
 
         val slug = SlugUtils.generateUniqueSlug(request.title) { courseRepository.existsBySlug(it) }
 
@@ -160,9 +169,15 @@ class CourseService(
 
         val savedCourse = courseRepository.save(newCourse)
 
-        author.createdCourseIds.add(savedCourse.id!!)
-        userRepository.save(author)
+        if (author.id != creatorUserId && !author.createdCourseIds.contains(savedCourse.id!!)) {
+            author.createdCourseIds.add(savedCourse.id)
+            userRepository.save(author)
+        } else if (author.id == creatorUserId && !author.createdCourseIds.contains(savedCourse.id!!)) {
+            author.createdCourseIds.add(savedCourse.id)
+            userRepository.save(author)
+        }
 
+        mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
         return getCourseDetailsAdmin(savedCourse.id)
     }
 
@@ -478,16 +493,22 @@ class CourseService(
 
         checkPermission(course.authorId, currentUserId, "обновить этот курс")
 
-        if (course.authorId != request.authorId && !isAdmin(currentUserId)) {
-            throw AccessDeniedException("Вы не можете изменить автора курса.")
+        val currentUser = userRepository.findById(currentUserId).orElseThrow {
+            ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден")
         }
-        if (course.authorId != request.authorId && isAdmin(currentUserId)) {
+
+        if ((currentUser.roles.contains("ROLE_MENTOR") && !currentUser.roles.contains("ROLE_ADMIN")) &&
+            request.authorId != course.authorId
+        ) {
+            throw AccessDeniedException("Менторы не могут изменять автора курса.")
+        }
+
+        if ((currentUser.roles.contains("ROLE_ADMIN")) && request.authorId != course.authorId) {
             if (!userRepository.existsById(request.authorId)) {
                 throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Новый автор с ID ${request.authorId} не найден")
             }
-            // TODO: Логика переноса курса от старого автора к новому, если нужно
+            // TODO: Подумать о логике переноса курса от старого автора к новому, если это нужно
         }
-
 
         val newSlug = if (course.title != request.title) {
             SlugUtils.generateUniqueSlug(request.title) { newSlug ->
@@ -505,7 +526,7 @@ class CourseService(
             discount = request.discount ?: course.discount,
             difficulty = request.difficulty,
             category = request.category,
-            authorId = request.authorId, // Разрешаем менять админу
+            authorId = request.authorId,
             imagePreview = request.imagePreview ?: course.imagePreview,
             videoPreview = request.videoPreview ?: course.videoPreview,
             featuresBadge = request.featuresBadge ?: course.featuresBadge,
@@ -616,8 +637,10 @@ class CourseService(
     }
 
     private fun checkPermission(courseAuthorId: String, currentUserId: String, actionDescription: String) {
-        val authentication = SecurityContextHolder.getContext().authentication
-        val isAdmin = authentication?.authorities?.any { it.authority == "ROLE_ADMIN" } ?: false
+        val currentUser = userRepository.findById(currentUserId)
+            .orElseThrow { AccessDeniedException("Пользователь не найден, действие запрещено.") }
+
+        val isAdmin = currentUser.roles.contains("ROLE_ADMIN") || currentUser.roles.contains("ADMIN")
 
         if (!isAdmin && courseAuthorId != currentUserId) {
             throw AccessDeniedException("У вас нет прав, чтобы $actionDescription.")

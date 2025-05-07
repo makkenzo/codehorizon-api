@@ -41,7 +41,7 @@ class AdminCourseController(
         @RequestParam(defaultValue = "20") @Parameter(description = "Количество элементов на странице") size: Int,
         @RequestParam(required = false) @Parameter(description = "Поле для сортировки (напр., title_asc, price_desc)") sortBy: String?,
         @RequestParam(required = false) @Parameter(description = "Поиск по названию") titleSearch: String?,
-        @RequestParam(required = false) @Parameter(description = "Фильтр по ID автора (для менторов)") authorId: String?,
+        @RequestParam(required = false) @Parameter(description = "Фильтр по ID автора (для менторов)") authorIdParam: String?,
         httpRequest: HttpServletRequest
     ): ResponseEntity<PagedResponseDTO<AdminCourseListItemDTO>> {
         val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
@@ -50,13 +50,11 @@ class AdminCourseController(
         val currentUserRoles = jwtUtils.getRolesFromToken(token)
         val isAdmin = currentUserRoles.contains("ROLE_ADMIN")
 
-        val effectiveAuthorId = if (isAdmin) {
-            authorId
+        val effectiveAuthorIdFilter: String?
+        if (isAdmin) {
+            effectiveAuthorIdFilter = authorIdParam
         } else if (currentUserRoles.contains("ROLE_MENTOR")) {
-            if (authorId != null && authorId != currentUserId) {
-                throw AccessDeniedException("Менторы могут просматривать только свои курсы.")
-            }
-            currentUserId
+            effectiveAuthorIdFilter = currentUserId
         } else {
             throw AccessDeniedException("У вас нет прав для просмотра списка курсов.")
         }
@@ -65,7 +63,7 @@ class AdminCourseController(
         val sort = parseSortParameter(sortBy)
         val pageable: Pageable = PageRequest.of(pageIndex, size, sort)
 
-        val coursesPage = courseService.findAllCoursesAdmin(pageable, titleSearch, effectiveAuthorId)
+        val coursesPage = courseService.findAllCoursesAdmin(pageable, titleSearch, effectiveAuthorIdFilter)
         return ResponseEntity.ok(coursesPage)
     }
 
@@ -86,16 +84,26 @@ class AdminCourseController(
     ): ResponseEntity<AdminCourseDetailDTO> {
         val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-        val userRoles = jwtUtils.getRolesFromToken(token)
+        val currentUserId = jwtUtils.getIdFromToken(token)
+        val currentUserRoles = jwtUtils.getRolesFromToken(token)
 
-        if (userRoles.contains("ROLE_MENTOR") && !userRoles.contains("ROLE_ADMIN")) {
-            if (request.authorId != userId) {
+        val effectiveRequestDTO: AdminCreateUpdateCourseRequestDTO
+        if (currentUserRoles.contains("ROLE_MENTOR") && !currentUserRoles.contains("ROLE_ADMIN")) {
+            if (request.authorId != currentUserId && request.authorId.isNotBlank()) {
                 throw AccessDeniedException("Менторы могут создавать курсы только от своего имени.")
             }
+            effectiveRequestDTO = request.copy(authorId = currentUserId)
+        } else if (currentUserRoles.contains("ROLE_ADMIN")) {
+            if (request.authorId.isBlank()) {
+                throw IllegalArgumentException("Администратор должен указать автора курса при создании.")
+            } else {
+                effectiveRequestDTO = request
+            }
+        } else {
+            throw AccessDeniedException("У вас нет прав для создания курса.")
         }
 
-        val newCourse = courseService.createCourseAdmin(request)
+        val newCourse = courseService.createCourseAdmin(effectiveRequestDTO, currentUserId)
         return ResponseEntity.status(HttpStatus.CREATED).body(newCourse)
     }
 
