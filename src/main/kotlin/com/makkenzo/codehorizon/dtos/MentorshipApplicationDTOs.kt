@@ -23,5 +23,6 @@ data class MentorshipApplicationDTO(
     val rejectionReason: String?,
     val appliedAt: Instant,
     val reviewedAt: Instant?,
-    val reviewedBy: String?
+    val reviewedBy: String?,
+    val userRegisteredAt: Instant?
 )

@@ -139,6 +139,8 @@ class MentorshipApplicationService(
     }
 
     private fun mapToDTO(app: MentorshipApplication): MentorshipApplicationDTO {
+        val user = userRepository.findById(app.userId).orElse(null)
+         
         return MentorshipApplicationDTO(
             id = app.id!!,
             userId = app.userId,
@@ -149,7 +151,8 @@ class MentorshipApplicationService(
             rejectionReason = app.rejectionReason,
             appliedAt = app.appliedAt,
             reviewedAt = app.reviewedAt,
-            reviewedBy = app.reviewedBy
+            reviewedBy = app.reviewedBy,
+            userRegisteredAt = user?.createdAt
         )
     }
 }
