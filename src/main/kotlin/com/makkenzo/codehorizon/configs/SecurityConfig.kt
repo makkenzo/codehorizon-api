@@ -48,7 +48,8 @@ class SecurityConfig(
                         "/api/users/{username}/profile",
                         "/api/users/popular-authors",
                         "/api/payments/stripe/webhook",
-                        "/swagger-ui/**", "/v3/api-docs/**"
+                        "/swagger-ui/**", "/v3/api-docs/**",
+                        "/actuator/prometheus"
                     ).permitAll()
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
