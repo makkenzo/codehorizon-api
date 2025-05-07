@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.itextpdf.html2pdf.ConverterProperties
 import com.itextpdf.html2pdf.HtmlConverter
+import com.itextpdf.io.font.FontProgramFactory
 import com.itextpdf.kernel.geom.PageSize
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
@@ -20,31 +21,37 @@ import java.time.format.DateTimeFormatter
 class PdfGenerationService(private val templateEngine: TemplateEngine) {
     private val logger = LoggerFactory.getLogger(PdfGenerationService::class.java)
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZoneId.systemDefault())
-    private val fontProvider: FontProvider
+    private val fontProvider: FontProvider = FontProvider()
 
     init {
-        fontProvider = FontProvider()
         try {
-            val fontPathLiberation = "fonts/LiberationSans-Regular.ttf"
-            val fontPathDejaVu = "fonts/DejaVuSans.ttf"
+            val liberationSansPath = "fonts/LiberationSans-Regular.ttf"
+            val dejavuSansPath = "fonts/DejaVuSans.ttf"
 
-            if (ClassPathResource(fontPathLiberation).exists()) {
-                fontProvider.addFont(fontPathLiberation)
-                logger.info("Шрифт Liberation Sans добавлен в FontProvider iText.")
+            val liberationResource = ClassPathResource(liberationSansPath)
+            if (liberationResource.exists()) {
+                val liberationBytes = liberationResource.inputStream.readAllBytes()
+                val liberationFontProgram = FontProgramFactory.createFont(liberationBytes, true)
+                fontProvider.addFont(liberationFontProgram)
+                logger.info("Шрифт Liberation Sans ({}) успешно добавлен в FontProvider.", liberationSansPath)
             } else {
-                logger.warn("Шрифт Liberation Sans не найден в classpath: {}", fontPathLiberation)
+                logger.warn("Шрифт Liberation Sans не найден в classpath: {}", liberationSansPath)
             }
-            if (ClassPathResource(fontPathDejaVu).exists()) {
-                fontProvider.addFont(fontPathDejaVu)
-                logger.info("Шрифт DejaVu Sans добавлен в FontProvider iText.")
+
+            val dejavuResource = ClassPathResource(dejavuSansPath)
+            if (dejavuResource.exists()) {
+                val dejavuBytes = dejavuResource.inputStream.readAllBytes()
+                val dejavuFontProgram = FontProgramFactory.createFont(dejavuBytes, true)
+                fontProvider.addFont(dejavuFontProgram)
+                logger.info("Шрифт DejaVu Sans ({}) успешно добавлен в FontProvider.", dejavuSansPath)
             } else {
-                logger.warn("Шрифт DejaVu Sans не найден в classpath: {}", fontPathDejaVu)
+                logger.warn("Шрифт DejaVu Sans не найден в classpath: {}", dejavuSansPath)
             }
+
         } catch (e: Exception) {
             logger.error("Ошибка при добавлении шрифтов в FontProvider iText: {}", e.message, e)
         }
         fontProvider.addStandardPdfFonts()
-        fontProvider.addSystemFonts()
     }
 
 
@@ -54,6 +61,7 @@ class PdfGenerationService(private val templateEngine: TemplateEngine) {
         context.setVariable("courseTitle", certificate.courseTitle)
         context.setVariable("completionDate", dateFormatter.format(certificate.completionDate))
         context.setVariable("certificateId", certificate.uniqueCertificateId)
+        context.setVariable("instructorName", certificate.instructorName ?: "Инструктор Курса")
 
         val htmlContent: String = try {
             templateEngine.process("certificate-template", context)
@@ -71,7 +79,6 @@ class PdfGenerationService(private val templateEngine: TemplateEngine) {
             pdfDocument.defaultPageSize = PageSize.A4.rotate()
 
             val converterProperties = ConverterProperties()
-
             converterProperties.fontProvider = fontProvider
 
             HtmlConverter.convertToPdf(htmlContent, pdfDocument, converterProperties)

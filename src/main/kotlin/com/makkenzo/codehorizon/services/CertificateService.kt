@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.CertificateDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Certificate
+import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CertificateRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.*
 
 @Service
 class CertificateService(
@@ -25,6 +27,15 @@ class CertificateService(
     private val logger = LoggerFactory.getLogger(CertificateService::class.java)
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZoneId.systemDefault())
 
+    private fun generateFriendlyCertificateId(): String {
+        val randomNumberPart = (10000..99999).random().toString()
+        val randomCharsPart = UUID.randomUUID().toString()
+            .replace("-", "")
+            .take(5)
+            .uppercase()
+        return "CERT-$randomNumberPart-$randomCharsPart"
+    }
+
     @Transactional
     fun createCertificateRecord(userId: String, courseId: String): Certificate? {
         if (certificateRepository.existsByUserIdAndCourseId(userId, courseId)) {
@@ -32,40 +43,60 @@ class CertificateService(
             return certificateRepository.findByUserId(userId).find { it.courseId == courseId }
         }
 
-        val user = userRepository.findById(userId).orElse(null)
+        val studentUser = userRepository.findById(userId).orElse(null)
         val course = courseRepository.findById(courseId).orElse(null)
-        val profile = profileRepository.findByUserId(userId)
+        val studentProfile = profileRepository.findByUserId(userId)
 
-        if (user == null || course == null) {
+        if (studentUser == null || course == null) {
             logger.error("Не удалось создать сертификат: пользователь {} или курс {} не найден.", userId, courseId)
             return null
         }
 
-        val determinedUserName: String = when {
-            profile != null -> {
+        val studentName: String = when {
+            studentProfile != null -> {
                 when {
-                    !profile.firstName.isNullOrBlank() && !profile.lastName.isNullOrBlank() ->
-                        "${profile.firstName} ${profile.lastName}"
+                    !studentProfile.firstName.isNullOrBlank() && !studentProfile.lastName.isNullOrBlank() ->
+                        "${studentProfile.firstName} ${studentProfile.lastName}"
 
-                    !profile.firstName.isNullOrBlank() ->
-                        profile.firstName
-
-                    !profile.lastName.isNullOrBlank() ->
-                        profile.lastName
-
-                    else -> user.username
+                    !studentProfile.firstName.isNullOrBlank() -> studentProfile.firstName
+                    !studentProfile.lastName.isNullOrBlank() -> studentProfile.lastName
+                    else -> studentUser.username
                 }
             }
 
-            else -> user.username
+            else -> studentUser.username
         }
 
+        var instructorDisplayName: String? = "Инструктор Курса"
+        val courseAuthorUser: User? = userRepository.findById(course.authorId).orElse(null)
+        if (courseAuthorUser != null) {
+            val instructorProfile = profileRepository.findByUserId(courseAuthorUser.id!!)
+            instructorDisplayName = when {
+                instructorProfile != null -> {
+                    when {
+                        !instructorProfile.firstName.isNullOrBlank() && !instructorProfile.lastName.isNullOrBlank() ->
+                            "${instructorProfile.firstName} ${instructorProfile.lastName}"
+
+                        !instructorProfile.firstName.isNullOrBlank() -> instructorProfile.firstName
+                        !instructorProfile.lastName.isNullOrBlank() -> instructorProfile.lastName
+                        else -> courseAuthorUser.username
+                    }
+                }
+
+                else -> courseAuthorUser.username
+            }
+        } else {
+            logger.warn("Автор курса (инструктор) с ID {} не найден для курса {}.", course.authorId, courseId)
+        }
 
         val certificate = Certificate(
             userId = userId,
             courseId = courseId,
             courseTitle = course.title,
-            userName = determinedUserName
+            userName = studentName,
+            uniqueCertificateId = generateFriendlyCertificateId(),
+            instructorName = instructorDisplayName,
+            category = course.category
         )
 
         val savedCertificate = try {
@@ -82,10 +113,11 @@ class CertificateService(
         }
 
         logger.info(
-            "Создан сертификат ID: {} для пользователя {} и курса {}",
+            "Создан сертификат ID: {} для пользователя {} и курса {}. Инструктор: {}",
             savedCertificate.uniqueCertificateId,
             userId,
-            courseId
+            courseId,
+            savedCertificate.instructorName ?: "N/A"
         )
         return savedCertificate
     }
@@ -96,7 +128,9 @@ class CertificateService(
                 id = cert.id!!,
                 uniqueCertificateId = cert.uniqueCertificateId,
                 courseTitle = cert.courseTitle,
-                completionDate = dateFormatter.format(cert.completionDate)
+                completionDate = dateFormatter.format(cert.completionDate),
+                instructorName = cert.instructorName,
+                category = cert.category
             )
         }
     }

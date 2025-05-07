@@ -22,13 +22,13 @@
                 padding: 0;
                 color: #374151;
                 background-color: #f9fafb;
-                line-height: 1.5;
+                line-height: 1.1;
             }
 
             .certificate-container {
                 width: 277mm;
                 height: 190mm;
-                margin: 10mm;
+                margin: 4mm;
                 background-color: #ffffff;
                 padding: 2px;
                 border-radius: 8px;
@@ -36,6 +36,7 @@
                 position: relative;
                 overflow: hidden;
             }
+
             .certificate-border {
                 border: 3px solid rgba(61, 203, 177, 0.3);
                 border-radius: 6px;
@@ -44,6 +45,7 @@
                 box-sizing: border-box;
                 position: relative;
                 display: block;
+                overflow: hidden;
             }
             .certificate-content {
                 text-align: center;
@@ -168,33 +170,34 @@
 
             .deco-circle-tl {
                 position: absolute;
-                top: -64px;
-                left: -64px;
+                top: 64px;
+                left: 64px;
                 width: 256px;
                 height: 256px;
                 background-color: rgba(61, 203, 177, 0.1);
                 border-radius: 50%;
                 z-index: 0;
+                transform: translate(-50%, -50%);
             }
             .deco-circle-br {
                 position: absolute;
-                bottom: -64px;
-                right: -64px;
+                bottom: 64px;
+                right: 64px;
                 width: 256px;
                 height: 256px;
                 background-color: rgba(61, 203, 177, 0.1);
                 border-radius: 50%;
                 z-index: 0;
+                transform: translate(50%, 50%);
             }
         </style>
     </head>
     <body>
         <div class="certificate-container">
             <div class="certificate-border">
+                <div class="deco-circle-tl"></div>
+                <div class="deco-circle-br"></div>
                 <div class="certificate-content">
-                    <div class="deco-circle-tl"></div>
-                    <div class="deco-circle-br"></div>
-
                     <div class="logo-container">
                         <img
                             alt="CodeHorizon"
@@ -231,8 +234,8 @@
                                 </td>
                                 <td class="signature-block">
                                     <div class="signature-line"></div>
-                                    <p class="signature-name">Инструктор Курса</p>
-                                    <p class="signature-title">(если применимо)</p>
+                                    <p class="signature-name" th:text="${instructorName}">Инструктор Курса</p>
+                                    <p class="signature-title">Инструктор Курса</p>
                                 </td>
                             </tr>
                         </table>
@@ -248,7 +251,7 @@
                                 </td>
                                 <td class="footer-cell">
                                     <span class="issued-date"
-                                        >Выдан: <span th:text="${completionDate}">06.05.2025</span></span
+                                        >Дата выдачи: <span th:text="${completionDate}">06.05.2025</span></span
                                     >
                                 </td>
                                 <td class="footer-cell footer-cell-right">
