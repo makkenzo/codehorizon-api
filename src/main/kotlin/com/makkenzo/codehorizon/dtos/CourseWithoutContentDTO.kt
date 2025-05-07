@@ -32,6 +32,8 @@ data class CourseWithoutContentDTO(
 ) : Serializable
 
 data class LessonWithoutContent(
+    val id: String,
     val slug: String,
-    val title: String
+    val title: String,
+    val videoLength: Double? = null,
 ) : Serializable

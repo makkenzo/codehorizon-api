@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.models.Attachment
 import com.makkenzo.codehorizon.models.Task
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.PositiveOrZero
 import jakarta.validation.constraints.Size
 
 data class AdminCreateUpdateLessonRequestDTO(
@@ -18,6 +19,9 @@ data class AdminCreateUpdateLessonRequestDTO(
 
     val tasks: List<@Valid Task>? = emptyList(),
     val attachments: List<@Valid Attachment>? = emptyList(),
-    
-    val mainAttachment: String? = null
+
+    val mainAttachment: String? = null,
+
+    @field:PositiveOrZero(message = "Длительность видео не может быть отрицательной")
+    val videoLength: Double? = null
 )

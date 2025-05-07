@@ -27,7 +27,6 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import java.util.*
@@ -35,7 +34,6 @@ import java.util.*
 @Service
 class CourseService(
     private val courseRepository: CourseRepository,
-    private val userService: UserService,
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate,
     private val courseProgressRepository: CourseProgressRepository,
@@ -290,8 +288,10 @@ class CourseService(
             discount = course.discount,
             lessons = course.lessons.map {
                 LessonWithoutContent(
+                    id = it.id,
                     slug = it.slug ?: "",
-                    title = it.title
+                    title = it.title,
+                    videoLength = it.videoLength,
                 )
             },
             featuresBadge = course.featuresBadge,
@@ -541,7 +541,7 @@ class CourseService(
 
         val savedCourse = courseRepository.save(updatedCourse)
         mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
-        return getCourseDetailsAdmin(savedCourse.id!!)
+        return getCourseDetailsAdmin(savedCourse.id)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -582,12 +582,22 @@ class CourseService(
             codeExamples = lessonDto.codeExamples ?: emptyList(),
             tasks = lessonDto.tasks ?: emptyList(),
             attachments = lessonDto.attachments ?: emptyList(),
-            mainAttachment = lessonDto.mainAttachment
+            mainAttachment = lessonDto.mainAttachment,
+            videoLength = lessonDto.videoLength ?: 0.0
         )
 
         course.lessons.add(newLesson)
         val savedCourse = courseRepository.save(course)
-        return getCourseDetailsAdmin(savedCourse.id!!)
+
+        if (!newLesson.mainAttachment.isNullOrBlank()) {
+            mediaProcessingService.updateLessonVideoLengthAsync(
+                savedCourse.id!!,
+                newLesson.id,
+                newLesson.mainAttachment!!
+            )
+        }
+        mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
+        return getCourseDetailsAdmin(savedCourse.id)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -606,11 +616,15 @@ class CourseService(
             HttpStatus.NOT_FOUND,
             "Урок с ID $lessonId не найден в курсе"
         )
+
         val existingLesson = course.lessons[lessonIndex]
+        val oldMainAttachment = existingLesson.mainAttachment
+
         val newLessonSlug =
             if (existingLesson.title != lessonDto.title) {
                 SlugUtils.generateUniqueSlug(lessonDto.title) { newSlug -> newSlug != existingLesson.slug && course.lessons.any { it.slug == newSlug && it.id != lessonId } }
             } else existingLesson.slug
+
         val updatedLesson = existingLesson.copy(
             title = lessonDto.title,
             slug = newLessonSlug,
@@ -618,11 +632,28 @@ class CourseService(
             codeExamples = lessonDto.codeExamples ?: existingLesson.codeExamples,
             tasks = lessonDto.tasks ?: existingLesson.tasks,
             attachments = lessonDto.attachments ?: existingLesson.attachments,
-            mainAttachment = lessonDto.mainAttachment
+            mainAttachment = lessonDto.mainAttachment,
+            videoLength = when {
+                lessonDto.videoLength != null -> lessonDto.videoLength
+                lessonDto.mainAttachment != oldMainAttachment && !lessonDto.mainAttachment.isNullOrBlank() -> 0.0
+                lessonDto.mainAttachment != oldMainAttachment && lessonDto.mainAttachment.isNullOrBlank() -> 0.0
+                else -> existingLesson.videoLength
+            }
         )
+
         course.lessons[lessonIndex] = updatedLesson
         val savedCourse = courseRepository.save(course)
-        return getCourseDetailsAdmin(savedCourse.id!!)
+
+        if (updatedLesson.mainAttachment != oldMainAttachment && !updatedLesson.mainAttachment.isNullOrBlank()) {
+            mediaProcessingService.updateLessonVideoLengthAsync(
+                savedCourse.id!!,
+                updatedLesson.id,
+                updatedLesson.mainAttachment!!
+            )
+        }
+
+        mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
+        return getCourseDetailsAdmin(savedCourse.id)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -645,10 +676,5 @@ class CourseService(
         if (!isAdmin && courseAuthorId != currentUserId) {
             throw AccessDeniedException("У вас нет прав, чтобы $actionDescription.")
         }
-    }
-
-    private fun isAdmin(currentUserId: String): Boolean {
-        val authentication = SecurityContextHolder.getContext().authentication
-        return authentication?.authorities?.any { it.authority == "ROLE_ADMIN" } ?: false
     }
 }

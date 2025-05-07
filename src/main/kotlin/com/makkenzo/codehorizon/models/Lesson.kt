@@ -11,5 +11,6 @@ data class Lesson(
     var codeExamples: List<String> = emptyList(),
     var tasks: List<Task> = emptyList(),
     var attachments: List<Attachment> = emptyList(),
-    var mainAttachment: String? = null
+    var mainAttachment: String? = null,
+    var videoLength: Double? = 0.0
 ) : Serializable
