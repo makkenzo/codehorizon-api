@@ -3,12 +3,16 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.MentorshipApplicationDTO
 import com.makkenzo.codehorizon.dtos.MentorshipApplicationRequestDTO
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
+import com.makkenzo.codehorizon.events.MentorshipApplicationApprovedEvent
+import com.makkenzo.codehorizon.events.MentorshipApplicationRejectedEvent
+import com.makkenzo.codehorizon.events.NewMentorshipApplicationEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.ApplicationStatus
 import com.makkenzo.codehorizon.models.MentorshipApplication
 import com.makkenzo.codehorizon.repositories.MentorshipApplicationRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -18,7 +22,8 @@ import java.time.Instant
 @Service
 class MentorshipApplicationService(
     private val applicationRepository: MentorshipApplicationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     private val logger = LoggerFactory.getLogger(MentorshipApplicationService::class.java)
 
@@ -46,7 +51,16 @@ class MentorshipApplicationService(
         )
         val savedApplication = applicationRepository.save(application)
         logger.info("Пользователь {} подал заявку на менторство. ID заявки: {}", userId, savedApplication.id)
-        // TODO: Отправить уведомление администратору о новой заявке
+
+        eventPublisher.publishEvent(
+            NewMentorshipApplicationEvent(
+                this,
+                savedApplication.id!!,
+                savedApplication.username,
+                savedApplication.userEmail
+            )
+        )
+
         return mapToDTO(savedApplication)
     }
 
@@ -96,6 +110,7 @@ class MentorshipApplicationService(
         application.status = ApplicationStatus.APPROVED
         application.reviewedAt = Instant.now()
         application.reviewedBy = adminUserId
+
         val savedApplication = applicationRepository.save(application)
 
         logger.info(
@@ -104,7 +119,17 @@ class MentorshipApplicationService(
             application.userId,
             adminUserId
         )
-        // TODO: Отправить уведомление пользователю об одобрении
+
+        eventPublisher.publishEvent(
+            MentorshipApplicationApprovedEvent(
+                this,
+                savedApplication.id!!,
+                savedApplication.userId,
+                savedApplication.username,
+                savedApplication.userEmail
+            )
+        )
+
         return mapToDTO(savedApplication)
     }
 
@@ -134,13 +159,24 @@ class MentorshipApplicationService(
             adminUserId,
             rejectionReason ?: "Не указана"
         )
-        // TODO: Отправить уведомление пользователю об отклонении
+        
+        eventPublisher.publishEvent(
+            MentorshipApplicationRejectedEvent(
+                this,
+                savedApplication.id!!,
+                savedApplication.userId,
+                savedApplication.username,
+                savedApplication.userEmail,
+                savedApplication.rejectionReason
+            )
+        )
+
         return mapToDTO(savedApplication)
     }
 
     private fun mapToDTO(app: MentorshipApplication): MentorshipApplicationDTO {
         val user = userRepository.findById(app.userId).orElse(null)
-         
+
         return MentorshipApplicationDTO(
             id = app.id!!,
             userId = app.userId,

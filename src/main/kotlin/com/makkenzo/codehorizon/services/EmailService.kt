@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.utils.JwtUtils
+import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
@@ -54,5 +55,18 @@ class EmailService(
         )
 
         mailSender.send(message)
+    }
+
+    fun sendSimpleEmail(to: String, subject: String, text: String) {
+        try {
+            val message = SimpleMailMessage()
+            message.setFrom(senderEmail)
+            message.setTo(to)
+            message.setSubject(subject)
+            message.setText(text)
+            mailSender.send(message)
+        } catch (e: Exception) {
+            println("Error sending simple email to $to: ${e.message}")
+        }
     }
 }
