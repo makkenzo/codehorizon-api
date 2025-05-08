@@ -198,7 +198,6 @@ class CourseController(
 
             courseService.enrollFreeCourse(userId, courseId)
             ResponseEntity.ok(MessageResponseDTO("Вы успешно записаны на курс!"))
-
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(MessageResponseDTO(e.message ?: "Курс не найден"))
         } catch (e: IllegalArgumentException) {

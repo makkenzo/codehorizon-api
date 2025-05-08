@@ -513,10 +513,6 @@ class CourseService(
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Курс с ID $courseId не найден")
 
-        if (course.isFree) {
-            return true
-        }
-
         return courseProgressRepository.existsByUserIdAndCourseId(userId, courseId)
     }
 
