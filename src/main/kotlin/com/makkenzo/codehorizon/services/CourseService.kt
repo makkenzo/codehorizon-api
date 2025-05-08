@@ -41,10 +41,8 @@ class CourseService(
     private val mongoTemplate: MongoTemplate,
     private val courseProgressRepository: CourseProgressRepository,
     private val mediaProcessingService: MediaProcessingService,
-    cloudflareService: CloudflareService
+    private val cloudflareService: CloudflareService
 ) {
-    private final val cloudflareService: CloudflareService = TODO("initialize me")
-
     fun findAllCoursesAdmin(
         pageable: Pageable,
         titleSearch: String?,
