@@ -39,7 +39,9 @@ data class Course(
     val testimonial: TestimonialData? = null,
 
     @Indexed
-    val createdAt: Instant = Instant.now()
+    val createdAt: Instant = Instant.now(),
+    @Indexed
+    val deletedAt: Instant? = null
 ) : Serializable
 
 enum class CourseDifficultyLevels {

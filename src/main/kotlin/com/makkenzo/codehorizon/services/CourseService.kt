@@ -29,6 +29,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import java.time.Instant
 import java.util.*
 
 @Service
@@ -39,14 +40,12 @@ class CourseService(
     private val courseProgressRepository: CourseProgressRepository,
     private val mediaProcessingService: MediaProcessingService
 ) {
-
-
     fun findAllCoursesAdmin(
         pageable: Pageable,
         titleSearch: String?,
         authorIdFilter: String?
     ): PagedResponseDTO<AdminCourseListItemDTO> {
-        val criteria = Criteria()
+        val criteria = Criteria.where("deletedAt").`is`(null)
         titleSearch?.let {
             criteria.and("title").regex(it, "i")
         }
@@ -182,7 +181,7 @@ class CourseService(
     fun findByIds(courseIds: List<String>): List<CourseDTO> {
         if (courseIds.isEmpty()) return emptyList()
 
-        val matchStage = Aggregation.match(Criteria.where("_id").`in`(courseIds))
+        val matchStage = Aggregation.match(Criteria.where("_id").`in`(courseIds).and("deletedAt").`is`(null))
 
         val lookupStage = Aggregation.lookup("profiles", "authorId", "userId", "authorProfile")
         val addFieldsStage = Aggregation.addFields()
@@ -212,7 +211,6 @@ class CourseService(
 
         val aggregation =
             Aggregation.newAggregation(matchStage, lookupStage, addFieldsStage, lookupUsersStage, projectStage)
-
         val aggregationResult = mongoTemplate.aggregate(aggregation, "courses", Document::class.java)
 
         return aggregationResult.mappedResults.map { doc ->
@@ -244,17 +242,19 @@ class CourseService(
     }
 
     fun getCoursesByAuthor(authorId: String): List<Course> {
-        return courseRepository.findByAuthorId(authorId)
+        return courseRepository.findByAuthorIdAndDeletedAtIsNull(authorId)
     }
 
     @Cacheable(value = ["courses"], key = "#courseId")
     fun getCourseById(courseId: String): Course {
-        return courseRepository.findById(courseId).orElseThrow { NoSuchElementException("Course not found") }
+        return courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Course not found with id: $courseId")
     }
 
     @Cacheable(value = ["courses"], key = "#slug")
     fun getCourseBySlug(slug: String): CourseWithoutContentDTO {
-        val course = courseRepository.findBySlug(slug) ?: throw NotFoundException("Course not found with slug: $slug")
+        val course = courseRepository.findBySlugAndDeletedAtIsNull(slug)
+            ?: throw NotFoundException("Course not found with slug: $slug")
 
         val profileDoc = mongoTemplate.getCollection("profiles")
             .find(Filters.eq("userId", course.authorId))
@@ -319,6 +319,8 @@ class CourseService(
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
         val criteria = mutableListOf<Criteria>()
+
+        criteria.add(Criteria.where("deletedAt").`is`(null))
 
         title?.let { criteria.add(Criteria.where("title").regex(".*$it.*", "i")) }
         description?.let { criteria.add(Criteria.where("description").regex(".*$it.*", "i")) }
@@ -478,8 +480,7 @@ class CourseService(
             throw AccessDeniedException("У вас нет доступа к этому курсу.")
         }
 
-        return courseRepository.findById(courseId)
-            .orElseThrow { NotFoundException("Курс с ID $courseId не найден") }
+        return getCourseById(courseId)
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
@@ -488,8 +489,8 @@ class CourseService(
         request: AdminCreateUpdateCourseRequestDTO,
         currentUserId: String
     ): AdminCourseDetailDTO {
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Course not found with id: $courseId")
 
         checkPermission(course.authorId, currentUserId, "обновить этот курс")
 
@@ -507,7 +508,22 @@ class CourseService(
             if (!userRepository.existsById(request.authorId)) {
                 throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Новый автор с ID ${request.authorId} не найден")
             }
-            // TODO: Подумать о логике переноса курса от старого автора к новому, если это нужно
+            val oldAuthorId = course.authorId
+            val oldAuthor = userRepository.findById(oldAuthorId).orElse(null)
+
+            oldAuthor?.let {
+                if (it.createdCourseIds.remove(courseId)) {
+                    userRepository.save(it)
+                }
+            }
+
+            val newAuthor = userRepository.findById(request.authorId).orElse(null)
+            newAuthor?.let {
+                if (!it.createdCourseIds.contains(courseId)) {
+                    it.createdCourseIds.add(courseId)
+                    userRepository.save(it)
+                }
+            }
         }
 
         val newSlug = if (course.title != request.title) {
@@ -556,8 +572,9 @@ class CourseService(
             it.createdCourseIds.remove(courseId)
             userRepository.save(it)
         }
-        courseRepository.deleteById(courseId)
-        // TODO: Удалить прогресс студентов, отзывы и т.д., связанные с курсом?
+
+        val updatedCourse = course.copy(deletedAt = Instant.now())
+        courseRepository.save(updatedCourse)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -566,8 +583,9 @@ class CourseService(
         lessonDto: AdminCreateUpdateLessonRequestDTO,
         currentUserId: String
     ): AdminCourseDetailDTO {
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId) ?: throw NotFoundException(
+            "Course not found with id: $courseId"
+        )
         checkPermission(course.authorId, currentUserId, "добавить урок в этот курс")
 
         val lessonSlug = SlugUtils.generateUniqueSlug(lessonDto.title) { slug ->
@@ -607,8 +625,9 @@ class CourseService(
         lessonDto: AdminCreateUpdateLessonRequestDTO,
         currentUserId: String
     ): AdminCourseDetailDTO {
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId) ?: throw NotFoundException(
+            "Course not found with id: $courseId"
+        )
         checkPermission(course.authorId, currentUserId, "обновить урок в этом курсе")
 
         val lessonIndex = course.lessons.indexOfFirst { it.id == lessonId }
@@ -658,8 +677,8 @@ class CourseService(
 
     @CacheEvict(value = ["courses"], key = "#courseId")
     fun deleteLessonAdminOrMentor(courseId: String, lessonId: String, currentUserId: String) {
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Course not found with id: $courseId")
         checkPermission(course.authorId, currentUserId, "удалить урок из этого курса")
 
         val removed = course.lessons.removeIf { it.id == lessonId }
