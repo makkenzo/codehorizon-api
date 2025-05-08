@@ -48,6 +48,7 @@ class SecurityConfig(
                         "/api/users/{username}/profile",
                         "/api/users/popular-authors",
                         "/api/payments/stripe/webhook",
+                        "/api/search",
                         "/swagger-ui/**", "/v3/api-docs/**",
                         "/actuator/prometheus"
                     ).permitAll()
