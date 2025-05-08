@@ -17,7 +17,10 @@ import java.net.URI
 import javax.imageio.ImageIO
 
 @Service
-class ProfileService(private val profileRepository: ProfileRepository) {
+class ProfileService(
+    private val profileRepository: ProfileRepository,
+    private val cloudflareService: CloudflareService
+) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
 
     fun createProfile(profile: Profile): Profile {
@@ -26,10 +29,6 @@ class ProfileService(private val profileRepository: ProfileRepository) {
         }
         return profileRepository.save(profile)
     }
-
-    fun getProfileById(id: String): Profile =
-        profileRepository.findById(id)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден") }
 
     @Cacheable(value = ["profiles"], key = "#userId")
     fun getProfileByUserId(userId: String): Profile =
@@ -42,24 +41,37 @@ class ProfileService(private val profileRepository: ProfileRepository) {
         val existingProfile = profileRepository.findByUserId(userId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
 
+        val oldAvatarUrl = existingProfile.avatarUrl
+        val oldSignatureUrl = existingProfile.signatureUrl
+        val newAvatarUrl = updatedProfileDTO.avatarUrl
+        val newSignatureUrl = updatedProfileDTO.signatureUrl
+
         val avatarChanged =
             updatedProfileDTO.avatarUrl != null && updatedProfileDTO.avatarUrl != existingProfile.avatarUrl
         val currentAvatarUrl = updatedProfileDTO.avatarUrl ?: existingProfile.avatarUrl
 
         val profileToUpdate = existingProfile.copy(
-            avatarUrl = currentAvatarUrl,
+            avatarUrl = newAvatarUrl,
             bio = updatedProfileDTO.bio ?: existingProfile.bio,
             firstName = updatedProfileDTO.firstName ?: existingProfile.firstName,
             lastName = updatedProfileDTO.lastName ?: existingProfile.lastName,
             location = updatedProfileDTO.location ?: existingProfile.location,
             website = updatedProfileDTO.website ?: existingProfile.website,
-            signatureUrl = updatedProfileDTO.signatureUrl
+            signatureUrl = newSignatureUrl
         )
 
         val savedProfile = profileRepository.save(profileToUpdate)
 
-        if (avatarChanged && !currentAvatarUrl.isNullOrBlank()) {
-            updateAvatarColorAsync(savedProfile.id!!, currentAvatarUrl)
+        if (oldAvatarUrl != null && oldAvatarUrl != newAvatarUrl) {
+            cloudflareService.deleteFileFromR2Async(oldAvatarUrl)
+        }
+        if (oldSignatureUrl != null && oldSignatureUrl != newSignatureUrl) {
+            if (oldSignatureUrl.startsWith(cloudflareService.r2PublicBaseUrl)) {
+                cloudflareService.deleteFileFromR2Async(oldSignatureUrl)
+            }
+        }
+        if (oldAvatarUrl != newAvatarUrl && !newAvatarUrl.isNullOrBlank()) {
+            updateAvatarColorAsync(savedProfile.id!!, newAvatarUrl)
         }
 
         return savedProfile

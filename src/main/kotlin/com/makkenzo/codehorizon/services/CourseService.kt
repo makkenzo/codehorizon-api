@@ -40,8 +40,11 @@ class CourseService(
     private val userRepository: UserRepository,
     private val mongoTemplate: MongoTemplate,
     private val courseProgressRepository: CourseProgressRepository,
-    private val mediaProcessingService: MediaProcessingService
+    private val mediaProcessingService: MediaProcessingService,
+    cloudflareService: CloudflareService
 ) {
+    private final val cloudflareService: CloudflareService = TODO("initialize me")
+
     fun findAllCoursesAdmin(
         pageable: Pageable,
         titleSearch: String?,
@@ -558,8 +561,6 @@ class CourseService(
             throw AccessDeniedException("Менторы не могут изменять автора курса.")
         }
 
-        println("Курс перед обновлением: ${course.isFree}")
-        println("Запрос на обновление: ${request.isFree}")
 
         val isNowFree = request.isFree ?: course.isFree
 
@@ -593,6 +594,11 @@ class CourseService(
             course.slug
         }
 
+        val oldImagePreview = course.imagePreview
+        val oldVideoPreview = course.videoPreview
+        val newImagePreview = request.imagePreview
+        val newVideoPreview = request.videoPreview
+
         val updatedCourse = course.copy(
             title = request.title,
             slug = newSlug,
@@ -616,8 +622,19 @@ class CourseService(
         )
 
         val savedCourse = courseRepository.save(updatedCourse)
-        mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
-        return getCourseDetailsAdmin(savedCourse.id)
+
+        if (oldImagePreview != null && oldImagePreview != newImagePreview) {
+            cloudflareService.deleteFileFromR2Async(oldImagePreview)
+        }
+        if (oldVideoPreview != null && oldVideoPreview != newVideoPreview) {
+            cloudflareService.deleteFileFromR2Async(oldVideoPreview)
+        }
+
+        if (newVideoPreview != oldVideoPreview) {
+            mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
+        }
+
+        return getCourseDetailsAdmin(savedCourse.id!!)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -626,6 +643,15 @@ class CourseService(
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
 
         checkPermission(course.authorId, currentUserId, "удалить этот курс")
+
+        course.imagePreview?.let { cloudflareService.deleteFileFromR2Async(it) }
+        course.videoPreview?.let { cloudflareService.deleteFileFromR2Async(it) }
+        course.lessons.forEach { lesson ->
+            lesson.mainAttachment?.let { cloudflareService.deleteFileFromR2Async(it) }
+            lesson.attachments?.forEach { attachment ->
+                cloudflareService.deleteFileFromR2Async(attachment.url)
+            }
+        }
 
         val author = userRepository.findById(course.authorId).orElse(null)
         author?.let {
@@ -697,7 +723,11 @@ class CourseService(
         )
 
         val existingLesson = course.lessons[lessonIndex]
+
         val oldMainAttachment = existingLesson.mainAttachment
+        val newMainAttachment = lessonDto.mainAttachment
+        val oldAttachments = existingLesson.attachments.map { it.url }.toSet()
+        val newAttachmentUrls = lessonDto.attachments?.map { it.url }?.toSet() ?: emptySet()
 
         val newLessonSlug =
             if (existingLesson.title != lessonDto.title) {
@@ -723,16 +753,19 @@ class CourseService(
         course.lessons[lessonIndex] = updatedLesson
         val savedCourse = courseRepository.save(course)
 
-        if (updatedLesson.mainAttachment != oldMainAttachment && !updatedLesson.mainAttachment.isNullOrBlank()) {
-            mediaProcessingService.updateLessonVideoLengthAsync(
-                savedCourse.id!!,
-                updatedLesson.id,
-                updatedLesson.mainAttachment!!
-            )
+        if (oldMainAttachment != null && oldMainAttachment != newMainAttachment) {
+            cloudflareService.deleteFileFromR2Async(oldMainAttachment)
+        }
+
+        val attachmentsToDelete = oldAttachments - newAttachmentUrls
+        attachmentsToDelete.forEach { cloudflareService.deleteFileFromR2Async(it) }
+
+        if (newMainAttachment != oldMainAttachment && !newMainAttachment.isNullOrBlank()) {
+            mediaProcessingService.updateLessonVideoLengthAsync(savedCourse.id!!, updatedLesson.id, newMainAttachment)
         }
 
         mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
-        return getCourseDetailsAdmin(savedCourse.id)
+        return getCourseDetailsAdmin(savedCourse.id!!)
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
@@ -741,9 +774,16 @@ class CourseService(
             ?: throw NotFoundException("Course not found with id: $courseId")
         checkPermission(course.authorId, currentUserId, "удалить урок из этого курса")
 
+        val lessonToRemove = course.lessons.find { it.id == lessonId }
         val removed = course.lessons.removeIf { it.id == lessonId }
-        if (!removed) throw ResponseStatusException(HttpStatus.NOT_FOUND, "Урок с ID $lessonId не найден в курсе")
+        if (!removed) throw ResponseStatusException(HttpStatus.NOT_FOUND, "Урок не найден")
+
         courseRepository.save(course)
+
+        lessonToRemove?.mainAttachment?.let { cloudflareService.deleteFileFromR2Async(it) }
+        lessonToRemove?.attachments?.forEach { cloudflareService.deleteFileFromR2Async(it.url) }
+
+        mediaProcessingService.updateCourseVideoLengthAsync(course.id!!)
     }
 
     private fun checkPermission(courseAuthorId: String, currentUserId: String, actionDescription: String) {

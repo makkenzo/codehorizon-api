@@ -2,10 +2,13 @@ package com.makkenzo.codehorizon.services
 
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
+import io.minio.RemoveObjectArgs
 import org.apache.tika.Tika
 import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
+import java.net.URI
 import java.util.*
 
 
@@ -20,6 +23,41 @@ class CloudflareService(private val minioClient: MinioClient) {
         "video/mp4"
     )
     private val maxFileSize = 1024 * 1024 * 1024 // 1024MB
+    public val r2PublicBaseUrl = "https://codehorizon-bucket.makkenzo.com"
+    private val bucketName = "codehorizon-media"
+
+    @Async
+    fun deleteFileFromR2Async(fileUrl: String?) {
+        if (fileUrl.isNullOrBlank() || !fileUrl.startsWith(r2PublicBaseUrl)) {
+            return
+        }
+
+        try {
+            val objectKey = URI.create(fileUrl).path.removePrefix("/")
+            if (objectKey.isBlank()) {
+                logger.warn("Не удалось извлечь ключ объекта из URL для удаления: {}", fileUrl)
+                return
+            }
+
+            logger.info("Запланировано удаление объекта из R2: {}", objectKey)
+            minioClient.removeObject(
+                RemoveObjectArgs.builder()
+                    .bucket(bucketName)
+                    .`object`(objectKey)
+                    .build()
+            )
+            logger.info("Объект {} успешно удален из R2.", objectKey)
+        } catch (e: Exception) {
+            logger.error(
+                "Ошибка при удалении объекта {} из R2 (URL: {}): {}",
+                fileUrl.substringAfterLast('/'),
+                fileUrl,
+                e.message,
+                e
+            )
+            // TODO: Рассмотреть механизм повторных попыток или отправку в очередь
+        }
+    }
 
     fun uploadFileToR2(file: MultipartFile, folder: String): String {
         val originalFilename = file.originalFilename ?: "unknown_file"
