@@ -44,6 +44,7 @@ class CourseController(
         @RequestParam(required = false) maxDuration: Double?,
         @RequestParam(required = false) category: List<String>?,
         @RequestParam(required = false) difficulty: List<CourseDifficultyLevels>?,
+        @RequestParam(required = false) isFree: Boolean?,
         @RequestParam(required = false) sortBy: String?,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int
@@ -51,7 +52,7 @@ class CourseController(
         val pageable: Pageable = PageRequest.of(page - 1, size)
 
         val courses = courseService.getCourses(
-            title, description, minRating, minDuration, maxDuration, category, difficulty, sortBy, pageable
+            title, description, minRating, minDuration, maxDuration, category, difficulty, isFree, sortBy, pageable
         )
 
         return ResponseEntity.ok(courses)

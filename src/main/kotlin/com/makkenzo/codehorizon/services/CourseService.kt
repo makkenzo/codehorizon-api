@@ -321,6 +321,7 @@ class CourseService(
         maxDuration: Double?,
         category: List<String>?,
         difficulty: List<CourseDifficultyLevels>?,
+        isFreeFilter: Boolean?,
         sortBy: String?,
         pageable: Pageable
     ): PagedResponseDTO<CourseDTO> {
@@ -333,6 +334,19 @@ class CourseService(
         minRating?.let { criteria.add(Criteria.where("rating").gte(it)) }
         category?.let { criteria.add(Criteria.where("category").`in`(it)) }
         difficulty?.let { criteria.add(Criteria.where("difficulty").`in`(it)) }
+        if (isFreeFilter != null) {
+            if (isFreeFilter) {
+                criteria.add(Criteria.where("isFree").`is`(true))
+            } else {
+                criteria.add(
+                    Criteria().orOperator(
+                        Criteria.where("isFree").`is`(false),
+                        Criteria.where("isFree").`is`(null),
+                        Criteria.where("isFree").exists(false)
+                    )
+                )
+            }
+        }
 
         val minDurationInSeconds = minDuration?.let { it * 3600 }
         val maxDurationInSeconds = maxDuration?.let { it * 3600 }
@@ -391,7 +405,7 @@ class CourseService(
         aggregationOperations.add(projectStage)
 
         when (sortBy?.lowercase()) {
-            "price_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "price"))
+            "price_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "isFree", "price"))
             "price_desc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "price"))
             "popular" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.DESC, "rating"))
             "date_asc" -> aggregationOperations.add(Aggregation.sort(Sort.Direction.ASC, "createdAt"))
