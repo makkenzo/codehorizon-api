@@ -183,4 +183,34 @@ class AdminCourseController(
         courseService.deleteLessonAdminOrMentor(courseId, lessonId, userId)
         return ResponseEntity.noContent().build()
     }
+
+    @GetMapping("/{courseId}/students")
+    @Operation(summary = "Получить прогресс студентов курса (Автор или Admin)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    fun getCourseStudentsProgress(
+        @PathVariable courseId: String,
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(defaultValue = "lastAccessedLessonAt,desc") sort: String,
+        httpRequest: HttpServletRequest
+    ): ResponseEntity<PagedResponseDTO<StudentProgressDTO>> {
+        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
+            ?: throw IllegalArgumentException("Access token cookie is missing")
+        val userId = jwtUtils.getIdFromToken(token)
+
+        val pageIndex = if (page > 0) page - 1 else 0
+
+        val sortParts = sort.split(',')
+        val direction = if (sortParts.size > 1 && sortParts[1].equals(
+                "asc",
+                ignoreCase = true
+            )
+        ) Sort.Direction.ASC else Sort.Direction.DESC
+        val property = if (sortParts.isNotEmpty()) sortParts[0] else "lastAccessedLessonAt"
+        val pageable: Pageable = PageRequest.of(pageIndex, size, Sort.by(direction, property))
+
+        val studentsPagedResponse = courseService.getStudentProgressForCourse(courseId, userId, pageable)
+
+        return ResponseEntity.ok(studentsPagedResponse)
+    }
 }

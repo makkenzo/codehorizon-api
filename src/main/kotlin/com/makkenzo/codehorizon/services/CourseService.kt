@@ -784,6 +784,70 @@ class CourseService(
         mediaProcessingService.updateCourseVideoLengthAsync(course.id!!)
     }
 
+    fun getStudentProgressForCourse(
+        courseId: String,
+        requestingUserId: String,
+        pageable: Pageable
+    ): PagedResponseDTO<StudentProgressDTO> {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс с ID $courseId не найден") }
+
+        checkPermission(course.authorId, requestingUserId, "просматривать прогресс студентов")
+
+        val query = Query(Criteria.where("courseId").`is`(courseId)).with(pageable)
+
+        val progressList = mongoTemplate.find(query, CourseProgress::class.java)
+
+        val totalProgressRecords = mongoTemplate.count(
+            Query(Criteria.where("courseId").`is`(courseId)),
+            CourseProgress::class.java
+        )
+
+        val studentIds = progressList.map { it.userId }
+        if (studentIds.isEmpty()) {
+            return PagedResponseDTO(
+                content = emptyList(),
+                pageNumber = pageable.pageNumber,
+                pageSize = pageable.pageSize,
+                totalElements = totalProgressRecords,
+                totalPages = if (pageable.pageSize > 0) (totalProgressRecords / pageable.pageSize + if (totalProgressRecords % pageable.pageSize == 0L) 0 else 1).toInt() else 0,
+                isLast = pageable.pageNumber >= (if (pageable.pageSize > 0) (totalProgressRecords / pageable.pageSize + if (totalProgressRecords % pageable.pageSize == 0L) 0 else 1).toInt() - 1 else 0) // Рассчитываем isLast
+            )
+        }
+
+        val students = userRepository.findAllById(studentIds).associateBy { it.id!! }
+        val totalLessonsInCourse = course.lessons.size
+
+        val studentProgressDTOs = progressList.mapNotNull { progress ->
+            val student = students[progress.userId] ?: return@mapNotNull null
+            StudentProgressDTO(
+                userId = student.id!!,
+                username = student.username,
+                email = student.email,
+                progressPercent = progress.progress,
+                completedLessonsCount = progress.completedLessons.size,
+                totalLessonsCount = totalLessonsInCourse,
+                lastAccessedLessonAt = progress.lastUpdated
+            )
+        }
+
+        val totalPages = if (pageable.pageSize > 0) {
+            (totalProgressRecords / pageable.pageSize + if (totalProgressRecords % pageable.pageSize == 0L) 0 else 1).toInt()
+        } else {
+            0
+        }
+        val isLast = pageable.pageNumber >= totalPages - 1
+
+        return PagedResponseDTO(
+            content = studentProgressDTOs,
+            pageNumber = pageable.pageNumber,
+            pageSize = pageable.pageSize,
+            totalElements = totalProgressRecords,
+            totalPages = totalPages,
+            isLast = isLast
+        )
+    }
+
     private fun checkPermission(courseAuthorId: String, currentUserId: String, actionDescription: String) {
         val currentUser = userRepository.findById(currentUserId)
             .orElseThrow { AccessDeniedException("Пользователь не найден, действие запрещено.") }
