@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.services.ReviewService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -20,7 +21,8 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "Reviews", description = "Отзывы к курсам")
 class ReviewController(
     private val reviewService: ReviewService,
-    private val jwtUtils: JwtUtils
+    private val jwtUtils: JwtUtils,
+    private val courseService: CourseService
 ) {
     @GetMapping
     @Operation(summary = "Получить отзывы для курса")
@@ -63,7 +65,10 @@ class ReviewController(
             ?: throw IllegalArgumentException("Access token cookie is missing")
         val userId = jwtUtils.getIdFromToken(token)
 
-        val createdReview = reviewService.createReview(courseId, userId, reviewDto)
+        val course = courseService.getCourseById(courseId)
+        val courseSlug = course.slug
+
+        val createdReview = reviewService.createReview(courseId, userId, reviewDto, courseSlug)
         return ResponseEntity.status(HttpStatus.CREATED).body(createdReview)
     }
 

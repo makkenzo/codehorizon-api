@@ -78,11 +78,21 @@ class UserService(
     }
 
     fun registerUser(username: String, email: String, password: String, confirmPassword: String): User {
+        val trimmedUsername = username.trim()
+
+        if (trimmedUsername.isBlank()) {
+            throw IllegalArgumentException("Username cannot be empty or contain only whitespace")
+        }
+
+        if (trimmedUsername.length < 3 || trimmedUsername.length > 50) {
+            throw IllegalArgumentException("Username length must be between 3 and 50 characters")
+        }
+
         if (userRepository.findByEmail(email) != null) {
             throw IllegalArgumentException("Email already exists")
         }
 
-        if (userRepository.findByUsername(username) != null) {
+        if (userRepository.findByUsername(trimmedUsername) != null) {
             throw IllegalArgumentException("Username already exists")
         }
 
@@ -99,9 +109,7 @@ class UserService(
         )
         val savedUser = userRepository.save(user)
 
-        val profile = Profile(
-            userId = savedUser.id!!,
-        )
+        val profile = Profile(userId = savedUser.id!!)
         profileService.createProfile(profile)
 
         return savedUser
@@ -138,7 +146,21 @@ class UserService(
         if (password.length < 8) {
             throw IllegalArgumentException("Password must be at least 8 characters long")
         }
+        if (!password.contains(Regex("[A-Z]"))) {
+            throw IllegalArgumentException("Password must contain at least one uppercase letter")
+        }
+        if (!password.contains(Regex("[0-9]"))) {
+            throw IllegalArgumentException("Password must contain at least one digit")
+        }
+        if (!password.contains(Regex("[!@#\$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]"))) {
+            throw IllegalArgumentException("Password must contain at least one special character")
+        }
+        if (password.contains(Regex("\\s"))) {
+            throw IllegalArgumentException("Password cannot contain whitespace characters")
+        }
+
         val pattern = Pattern.compile("^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}\$")
+
         if (!pattern.matcher(password).matches()) {
             throw IllegalArgumentException("Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
         }

@@ -29,8 +29,8 @@ class ReviewService(
     private val mongoTemplate: MongoTemplate
 ) {
     @Transactional
-    @CacheEvict(value = ["courses"], key = "#courseId")
-    fun createReview(courseId: String, authorId: String, dto: CreateReviewRequestDTO): ReviewDTO {
+    @CacheEvict(value = ["courses"], key = "#slug")
+    fun createReview(courseId: String, authorId: String, dto: CreateReviewRequestDTO, slug: String): ReviewDTO {
         if (!courseProgressRepository.existsByUserIdAndCourseId(
                 authorId,
                 courseId
