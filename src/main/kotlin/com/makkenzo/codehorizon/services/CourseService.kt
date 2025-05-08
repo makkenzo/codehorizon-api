@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseDifficultyLevels
+import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
@@ -28,6 +29,7 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.util.*
@@ -104,6 +106,7 @@ class CourseService(
             authorUsername = author?.username ?: "N/A",
             price = course.price,
             discount = course.discount,
+            isFree = course.isFree,
             difficulty = course.difficulty,
             category = course.category,
             videoLength = course.videoLength,
@@ -140,14 +143,17 @@ class CourseService(
             }
         }
 
+        val isFreeCourse = request.isFree ?: false
+
         val slug = SlugUtils.generateUniqueSlug(request.title) { courseRepository.existsBySlug(it) }
 
         val newCourse = Course(
             title = request.title,
             slug = slug,
             description = request.description,
-            price = request.price,
-            discount = request.discount ?: 0.0,
+            price = if (isFreeCourse) 0.0 else request.price,
+            discount = if (isFreeCourse) 0.0 else request.discount ?: 0.0,
+            isFree = isFreeCourse,
             authorId = request.authorId,
             difficulty = request.difficulty,
             category = request.category,
@@ -283,6 +289,7 @@ class CourseService(
             difficulty = course.difficulty,
             videoLength = course.videoLength,
             price = course.price,
+            isFree = course.isFree,
             authorName = authorName,
             authorUsername = authorUsername,
             discount = course.discount,
@@ -304,7 +311,6 @@ class CourseService(
             testimonial = course.testimonial,
         )
     }
-
 
     @Cacheable(value = ["courses"])
     fun getCourses(
@@ -365,6 +371,7 @@ class CourseService(
             "rating",
             "price",
             "discount",
+            "isFree",
             "difficulty",
             "category",
             "videoLength",
@@ -420,6 +427,7 @@ class CourseService(
                 rating = doc.get("rating", Number::class.java)?.toDouble() ?: 0.0,
                 price = doc.get("price", Number::class.java)?.toDouble() ?: 0.0,
                 discount = doc.get("discount", Number::class.java)?.toDouble() ?: 0.0,
+                isFree = doc.getBoolean("isFree") ?: false,
                 difficulty = doc.getString("difficulty")?.let { CourseDifficultyLevels.valueOf(it) }
                     ?: CourseDifficultyLevels.BEGINNER,
                 authorName = authorName,
@@ -473,14 +481,46 @@ class CourseService(
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
 
-    fun getFullCourseForLearning(courseId: String, userId: String): Course {
-        val progressExists = courseProgressRepository.findByUserIdAndCourseId(userId, courseId) != null
+    fun getAccessibleCourseForLearning(courseId: String, userId: String): Course {
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Курс с ID $courseId не найден")
 
-        if (!progressExists) {
+        val hasProgress = courseProgressRepository.existsByUserIdAndCourseId(userId, courseId)
+
+        if (!course.isFree && !hasProgress) {
             throw AccessDeniedException("У вас нет доступа к этому курсу.")
         }
 
-        return getCourseById(courseId)
+        return course
+    }
+
+    fun checkUserAccessToCourse(courseId: String, userId: String): Boolean {
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Курс с ID $courseId не найден")
+
+        if (course.isFree) {
+            return true
+        }
+
+        return courseProgressRepository.existsByUserIdAndCourseId(userId, courseId)
+    }
+
+    @Transactional
+    fun enrollFreeCourse(userId: String, courseId: String): CourseProgress {
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Курс с ID $courseId не найден")
+
+        if (!course.isFree) {
+            throw IllegalArgumentException("Этот курс не является бесплатным и требует оплаты.")
+        }
+
+        val existingProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
+        if (existingProgress != null) {
+            return existingProgress
+        }
+
+        val newProgress = CourseProgress(userId = userId, courseId = courseId, progress = 0.0)
+        return courseProgressRepository.save(newProgress)
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
@@ -503,6 +543,11 @@ class CourseService(
         ) {
             throw AccessDeniedException("Менторы не могут изменять автора курса.")
         }
+
+        println("Курс перед обновлением: ${course.isFree}")
+        println("Запрос на обновление: ${request.isFree}")
+
+        val isNowFree = request.isFree ?: course.isFree
 
         if ((currentUser.roles.contains("ROLE_ADMIN")) && request.authorId != course.authorId) {
             if (!userRepository.existsById(request.authorId)) {
@@ -538,8 +583,9 @@ class CourseService(
             title = request.title,
             slug = newSlug,
             description = request.description,
-            price = request.price,
-            discount = request.discount ?: course.discount,
+            isFree = isNowFree,
+            price = if (isNowFree) 0.0 else request.price,
+            discount = if (isNowFree) 0.0 else request.discount ?: course.discount,
             difficulty = request.difficulty,
             category = request.category,
             authorId = request.authorId,

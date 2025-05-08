@@ -18,6 +18,7 @@ data class CourseWithoutContentDTO(
     val rating: Double,
     val price: Double,
     val discount: Double,
+    val isFree: Boolean = false,
     val difficulty: CourseDifficultyLevels,
     val category: String?,
     val videoLength: Double?,

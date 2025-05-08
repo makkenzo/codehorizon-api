@@ -16,6 +16,7 @@ data class CourseDTO(
     val rating: Double,
     val price: Double,
     val discount: Double,
+    val isFree: Boolean = false,
     val difficulty: CourseDifficultyLevels,
     val category: String,
     val videoLength: Double = 0.0

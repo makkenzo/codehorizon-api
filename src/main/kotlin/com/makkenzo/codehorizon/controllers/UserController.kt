@@ -4,7 +4,9 @@ import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.PopularAuthorDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.dtos.UserProfileDTO
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.services.CourseProgressService
+import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.services.UserService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
@@ -24,7 +26,8 @@ import org.springframework.web.bind.annotation.*
 class UserController(
     private val userService: UserService,
     private val jwtUtils: JwtUtils,
-    private val courseProgressService: CourseProgressService
+    private val courseProgressService: CourseProgressService,
+    private val courseService: CourseService
 ) {
     @GetMapping("/{username}/profile")
     @Operation(summary = "Получение профиля по username")
@@ -61,10 +64,14 @@ class UserController(
         val token = request.cookies?.find { it.name == "access_token" }?.value
             ?: throw IllegalArgumentException("Access token cookie is missing")
         val userId = jwtUtils.getIdFromToken(token)
-        return if (courseProgressService.getUserCourseProgress(userId, courseId) != null) {
-            ResponseEntity.ok(true)
-        } else {
-            ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+
+        return try {
+            val hasAccess = courseService.checkUserAccessToCourse(courseId, userId)
+            ResponseEntity.ok(hasAccess)
+        } catch (e: NotFoundException) {
+            ResponseEntity.notFound().build()
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
         }
     }
 

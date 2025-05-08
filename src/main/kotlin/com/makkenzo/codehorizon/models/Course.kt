@@ -23,6 +23,7 @@ data class Course(
     @Indexed
     var price: Double = 0.0,
     var discount: Double = 0.0,
+    val isFree: Boolean = false,
     @Indexed
     val difficulty: CourseDifficultyLevels,
     @Indexed

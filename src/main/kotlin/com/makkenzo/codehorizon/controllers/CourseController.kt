@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.CourseDTO
 import com.makkenzo.codehorizon.dtos.CourseWithoutContentDTO
+import com.makkenzo.codehorizon.dtos.MessageResponseDTO
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
@@ -168,7 +169,7 @@ class CourseController(
                 ?: throw IllegalArgumentException("Access token cookie is missing")
             val userId = jwtUtils.getIdFromToken(token)
 
-            val course = courseService.getFullCourseForLearning(courseId, userId)
+            val course = courseService.getAccessibleCourseForLearning(courseId, userId)
             ResponseEntity.ok(course)
         } catch (e: AccessDeniedException) {
             throw e
@@ -176,6 +177,36 @@ class CourseController(
             throw e
         } catch (e: IllegalArgumentException) {
             throw ResponseStatusException(HttpStatus.UNAUTHORIZED, e.message)
+        }
+    }
+
+    @PostMapping("/{courseId}/enroll")
+    @Operation(
+        summary = "Записаться на бесплатный курс",
+        security = [SecurityRequirement(name = "bearerAuth")]
+    )
+    fun enrollOnCourse(
+        @PathVariable courseId: String,
+        request: HttpServletRequest
+    ): ResponseEntity<Any> {
+        return try {
+            val token = request.cookies?.find { it.name == "access_token" }?.value
+                ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(MessageResponseDTO("Требуется авторизация"))
+            val userId = jwtUtils.getIdFromToken(token)
+
+            courseService.enrollFreeCourse(userId, courseId)
+            ResponseEntity.ok(MessageResponseDTO("Вы успешно записаны на курс!"))
+
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(MessageResponseDTO(e.message ?: "Курс не найден"))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(MessageResponseDTO(e.message ?: "Ошибка записи на курс"))
+        } catch (e: AccessDeniedException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).body(MessageResponseDTO("Доступ запрещен"))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(MessageResponseDTO("Внутренняя ошибка сервера"))
         }
     }
 

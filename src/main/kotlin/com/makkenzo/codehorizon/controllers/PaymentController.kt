@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.CheckoutRequestDTO
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.services.PaymentService
 import com.makkenzo.codehorizon.services.StripeService
 import io.swagger.v3.oas.annotations.Operation
@@ -24,8 +25,13 @@ class PaymentController(
         return try {
             val sessionId = paymentService.createCheckoutSession(request.courseId, request.userId, request.coupon)
             ResponseEntity.ok(mapOf("sessionId" to sessionId))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null)
+        } catch (e: NotFoundException) {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to (e.message ?: "Курс не найден")))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mapOf("error" to (e.message ?: "Неверный запрос")))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(mapOf("error" to "Ошибка создания сессии оплаты"))
         }
     }
 

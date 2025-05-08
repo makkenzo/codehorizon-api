@@ -3,12 +3,14 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -61,7 +63,7 @@ class CourseProgressService(
         val progress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
         return progress?.progress
     }
-
+    
     @Transactional
     fun markLessonAsComplete(userId: String, courseId: String, lessonId: String): CourseProgress {
         val courseProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)

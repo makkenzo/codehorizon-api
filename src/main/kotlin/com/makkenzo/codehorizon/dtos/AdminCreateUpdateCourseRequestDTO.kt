@@ -23,6 +23,8 @@ data class AdminCreateUpdateCourseRequestDTO(
 
     @field:PositiveOrZero(message = "Скидка должна быть положительной или нулем")
     val discount: Double? = 0.0,
+    
+    val isFree: Boolean? = false,
 
     @field:NotNull(message = "Уровень сложности не может быть null")
     val difficulty: CourseDifficultyLevels,

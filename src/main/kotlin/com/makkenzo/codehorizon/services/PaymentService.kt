@@ -17,6 +17,10 @@ class PaymentService(private val courseService: CourseService) {
 
         val course = courseService.getCourseById(courseId)
 
+        if (course.isFree) {
+            throw IllegalArgumentException("Бесплатные курсы не могут быть добавлены в сессию оплаты.")
+        }
+
         val discountedPrice = ((course.price - course.discount) * 100).toLong().coerceAtLeast(0L)
 
         val sessionParams = SessionCreateParams.builder()
