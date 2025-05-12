@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.CheckoutRequestDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.services.AuthorizationService
 import com.makkenzo.codehorizon.services.PaymentService
 import com.makkenzo.codehorizon.services.StripeService
 import io.swagger.v3.oas.annotations.Operation
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -17,13 +19,21 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "Payments", description = "Оплата")
 class PaymentController(
     private val paymentService: PaymentService,
-    private val stripeService: StripeService
+    private val stripeService: StripeService,
+    private val authorizationService: AuthorizationService
 ) {
     @PostMapping("/checkout")
     @Operation(summary = "Создает Checkout Session для Stripe", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("hasAuthority('course:purchase')")
     fun createCheckoutSession(@Valid @RequestBody request: CheckoutRequestDTO): ResponseEntity<Map<String, String>> {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        if (request.userId != currentUserId) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(mapOf("error" to "ID пользователя в запросе не совпадает с аутентифицированным пользователем."))
+        }
+
         return try {
-            val sessionId = paymentService.createCheckoutSession(request.courseId, request.userId, request.coupon)
+            val sessionId = paymentService.createCheckoutSession(request.courseId, currentUserId, request.coupon)
             ResponseEntity.ok(mapOf("sessionId" to sessionId))
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to (e.message ?: "Курс не найден")))

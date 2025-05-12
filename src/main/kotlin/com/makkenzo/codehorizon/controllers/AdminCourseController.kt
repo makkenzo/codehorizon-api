@@ -14,7 +14,6 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
@@ -36,40 +35,25 @@ class AdminCourseController(
 
     @GetMapping
     @Operation(summary = "Получить список всех курсов (Только Admin)")
+    @PreAuthorize("hasAuthority('course:read:list:all') or hasAuthority('course:read:list:own_created')")
     fun getAllCourses(
         @RequestParam(defaultValue = "1") @Parameter(description = "Номер страницы (начиная с 1)") page: Int,
         @RequestParam(defaultValue = "20") @Parameter(description = "Количество элементов на странице") size: Int,
         @RequestParam(required = false) @Parameter(description = "Поле для сортировки (напр., title_asc, price_desc)") sortBy: String?,
         @RequestParam(required = false) @Parameter(description = "Поиск по названию") titleSearch: String?,
-        @RequestParam(required = false) @Parameter(description = "Фильтр по ID автора (для менторов)") authorIdParam: String?,
-        httpRequest: HttpServletRequest
+        @RequestParam(required = false) @Parameter(description = "Фильтр по ID автора (для менторов)") authorIdParam: String?
     ): ResponseEntity<PagedResponseDTO<AdminCourseListItemDTO>> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val currentUserId = jwtUtils.getIdFromToken(token)
-        val currentUserRoles = jwtUtils.getRolesFromToken(token)
-        val isAdmin = currentUserRoles.contains("ROLE_ADMIN")
-
-        val effectiveAuthorIdFilter: String?
-        if (isAdmin) {
-            effectiveAuthorIdFilter = authorIdParam
-        } else if (currentUserRoles.contains("ROLE_MENTOR")) {
-            effectiveAuthorIdFilter = currentUserId
-        } else {
-            throw AccessDeniedException("У вас нет прав для просмотра списка курсов.")
-        }
-
         val pageIndex = if (page > 0) page - 1 else 0
         val sort = parseSortParameter(sortBy)
         val pageable: Pageable = PageRequest.of(pageIndex, size, sort)
 
-        val coursesPage = courseService.findAllCoursesAdmin(pageable, titleSearch, effectiveAuthorIdFilter)
+        val coursesPage = courseService.findAllCoursesAdmin(pageable, titleSearch, authorIdParam)
         return ResponseEntity.ok(coursesPage)
     }
 
     @GetMapping("/{courseId}")
     @Operation(summary = "Получить детальную информацию о курсе (Только Admin)")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("@authorizationService.canReadAdminCourseDetails(#courseId)")
     fun getCourseDetails(@PathVariable courseId: String): ResponseEntity<AdminCourseDetailDTO> {
         val courseDetails = courseService.getCourseDetailsAdmin(courseId)
         return ResponseEntity.ok(courseDetails)
@@ -77,127 +61,76 @@ class AdminCourseController(
 
     @PostMapping
     @Operation(summary = "Создать новый курс (Admin или Mentor)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("hasAuthority('course:create')")
     fun createCourse(
-        @Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO,
-        httpRequest: HttpServletRequest
+        @Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val currentUserId = jwtUtils.getIdFromToken(token)
-        val currentUserRoles = jwtUtils.getRolesFromToken(token)
-
-        val effectiveRequestDTO: AdminCreateUpdateCourseRequestDTO
-        if (currentUserRoles.contains("ROLE_MENTOR") && !currentUserRoles.contains("ROLE_ADMIN")) {
-            if (request.authorId != currentUserId && request.authorId.isNotBlank()) {
-                throw AccessDeniedException("Менторы могут создавать курсы только от своего имени.")
-            }
-            effectiveRequestDTO = request.copy(authorId = currentUserId)
-        } else if (currentUserRoles.contains("ROLE_ADMIN")) {
-            if (request.authorId.isBlank()) {
-                throw IllegalArgumentException("Администратор должен указать автора курса при создании.")
-            } else {
-                effectiveRequestDTO = request
-            }
-        } else {
-            throw AccessDeniedException("У вас нет прав для создания курса.")
-        }
-
-        val newCourse = courseService.createCourseAdmin(effectiveRequestDTO, currentUserId)
+        val newCourse = courseService.createCourseAdmin(request)
         return ResponseEntity.status(HttpStatus.CREATED).body(newCourse)
     }
 
     @PutMapping("/{courseId}")
     @Operation(summary = "Обновить курс (Автор курса или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canEditCourse(#courseId)")
     fun updateCourse(
         @PathVariable courseId: String,
-        @Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO,
-        httpRequest: HttpServletRequest
+        @Valid @RequestBody request: AdminCreateUpdateCourseRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val updatedCourse = courseService.updateCourseAdminOrMentor(courseId, request, userId)
+        val updatedCourse = courseService.updateCourseAdminOrMentor(courseId, request)
         return ResponseEntity.ok(updatedCourse)
     }
 
     @DeleteMapping("/{courseId}")
     @Operation(summary = "Удалить курс (Автор курса или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canDeleteCourse(#courseId)")
     fun deleteCourse(@PathVariable courseId: String, httpRequest: HttpServletRequest): ResponseEntity<Void> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        courseService.deleteCourseAdminOrMentor(courseId, userId)
+        courseService.deleteCourseAdminOrMentor(courseId)
         return ResponseEntity.noContent().build()
     }
 
     @PostMapping("/{courseId}/lessons")
     @Operation(summary = "Добавить урок в курс (Автор курса или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canAddLessonToCourse(#courseId)")
     fun addLesson(
         @PathVariable courseId: String,
-        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO,
-        httpRequest: HttpServletRequest
+        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val updatedCourse = courseService.addLessonAdminOrMentor(courseId, lessonDto, userId)
+        val updatedCourse = courseService.addLessonAdminOrMentor(courseId, lessonDto)
         return ResponseEntity.status(HttpStatus.CREATED).body(updatedCourse)
     }
 
     @PutMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Обновить урок (Автор курса или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canEditLessonInCourse(#courseId, #lessonId)")
     fun updateLesson(
         @PathVariable courseId: String,
         @PathVariable lessonId: String,
-        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO,
-        httpRequest: HttpServletRequest
+        @Valid @RequestBody lessonDto: AdminCreateUpdateLessonRequestDTO
     ): ResponseEntity<AdminCourseDetailDTO> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val updatedCourse = courseService.updateLessonAdminOrMentor(courseId, lessonId, lessonDto, userId)
+        val updatedCourse = courseService.updateLessonAdminOrMentor(courseId, lessonId, lessonDto)
         return ResponseEntity.ok(updatedCourse)
     }
 
     @DeleteMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Удалить урок (Автор курса или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canDeleteLessonInCourse(#courseId, #lessonId)")
     fun deleteLesson(
         @PathVariable courseId: String,
-        @PathVariable lessonId: String,
-        httpRequest: HttpServletRequest
+        @PathVariable lessonId: String
     ): ResponseEntity<Void> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        courseService.deleteLessonAdminOrMentor(courseId, lessonId, userId)
+        courseService.deleteLessonAdminOrMentor(courseId, lessonId)
         return ResponseEntity.noContent().build()
     }
 
     @GetMapping("/{courseId}/students")
     @Operation(summary = "Получить прогресс студентов курса (Автор или Admin)")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MENTOR')")
+    @PreAuthorize("@authorizationService.canViewCourseStudents(#courseId)")
     fun getCourseStudentsProgress(
         @PathVariable courseId: String,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "10") size: Int,
-        @RequestParam(defaultValue = "lastAccessedLessonAt,desc") sort: String,
-        httpRequest: HttpServletRequest
+        @RequestParam(defaultValue = "lastAccessedLessonAt,desc") sort: String
     ): ResponseEntity<PagedResponseDTO<StudentProgressDTO>> {
-        val token = httpRequest.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-
         val pageIndex = if (page > 0) page - 1 else 0
 
         val sortParts = sort.split(',')
@@ -209,7 +142,7 @@ class AdminCourseController(
         val property = if (sortParts.isNotEmpty()) sortParts[0] else "lastAccessedLessonAt"
         val pageable: Pageable = PageRequest.of(pageIndex, size, Sort.by(direction, property))
 
-        val studentsPagedResponse = courseService.getStudentProgressForCourse(courseId, userId, pageable)
+        val studentsPagedResponse = courseService.getStudentProgressForCourse(courseId, pageable)
 
         return ResponseEntity.ok(studentsPagedResponse)
     }

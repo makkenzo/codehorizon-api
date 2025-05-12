@@ -31,6 +31,7 @@ class UserService(
     private val courseRepository: CourseRepository,
     private val courseProgressRepository: CourseProgressRepository,
     private val mongoTemplate: MongoTemplate,
+    private val authorizationService: AuthorizationService,
 ) {
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
         val userPage = userRepository.findAll(pageable)
@@ -53,9 +54,40 @@ class UserService(
         )
     }
 
+    fun getUserByIdForAdmin(id: String): AdminUserDTO {
+        val user = userRepository.findById(id)
+            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
+        return AdminUserDTO(
+            id = user.id!!,
+            username = user.username,
+            email = user.email,
+            isVerified = user.isVerified,
+            roles = user.roles
+        )
+    }
+
     fun adminUpdateUser(userId: String, request: AdminUpdateUserRequestDTO): AdminUserDTO {
         val user = userRepository.findById(userId)
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
+
+
+        if (user.id == authorizationService.getCurrentUserEntity().id &&
+            user.roles.contains("ROLE_ADMIN") &&
+            !(request.roles?.any { it.equals("ROLE_ADMIN", ignoreCase = true) || it.equals("ADMIN", ignoreCase = true) }
+                ?: false)
+        ) {
+            val adminCount = userRepository.findAll().count { u ->
+                u.roles.any {
+                    it.equals("ROLE_ADMIN", ignoreCase = true) || it.equals(
+                        "ADMIN",
+                        ignoreCase = true
+                    )
+                }
+            }
+            if (adminCount <= 1) {
+                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Нельзя убрать роль последнего администратора.")
+            }
+        }
 
         val newRoles = request.roles?.map { role ->
             if (role.startsWith("ROLE_")) role else "ROLE_$role"

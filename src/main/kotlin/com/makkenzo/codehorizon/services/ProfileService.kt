@@ -19,7 +19,8 @@ import javax.imageio.ImageIO
 @Service
 class ProfileService(
     private val profileRepository: ProfileRepository,
-    private val cloudflareService: CloudflareService
+    private val cloudflareService: CloudflareService,
+    private val authorizationService: AuthorizationService
 ) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
 
@@ -31,14 +32,23 @@ class ProfileService(
     }
 
     @Cacheable(value = ["profiles"], key = "#userId")
-    fun getProfileByUserId(userId: String): Profile =
-        profileRepository.findByUserId(userId)
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
+    fun getProfileByUserId(userId: String): Profile {
+        val profile = profileRepository.findByUserId(userId)
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден для пользователя $userId")
+
+        return profile
+    }
+
+    fun getCurrentUserProfile(): Profile {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        return getProfileByUserId(currentUserId)
+    }
 
     @Transactional
-    @CacheEvict(value = ["profiles"], key = "#userId")
-    fun updateProfile(userId: String, updatedProfileDTO: UpdateProfileDTO): Profile {
-        val existingProfile = profileRepository.findByUserId(userId)
+    @CacheEvict(value = ["profiles"], key = "#result.userId")
+    fun updateProfile(updatedProfileDTO: UpdateProfileDTO): Profile {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        val existingProfile = profileRepository.findByUserId(currentUserId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
 
         val oldAvatarUrl = existingProfile.avatarUrl
@@ -151,10 +161,15 @@ class ProfileService(
         }
     }
 
-    fun deleteProfile(id: String) {
-        if (!profileRepository.existsById(id)) {
-            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
-        }
-        profileRepository.deleteById(id)
+    @Transactional
+    @CacheEvict(value = ["profiles"], allEntries = true)
+    fun deleteProfile() {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        val profile = profileRepository.findByUserId(currentUserId)
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Профиль не найден")
+
+        profile.avatarUrl?.let { cloudflareService.deleteFileFromR2Async(it) }
+        profile.signatureUrl?.let { cloudflareService.deleteFileFromR2Async(it) }
+        profileRepository.delete(profile)
     }
 }

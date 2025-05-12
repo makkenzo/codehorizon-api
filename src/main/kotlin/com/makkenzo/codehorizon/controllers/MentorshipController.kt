@@ -3,11 +3,9 @@ package com.makkenzo.codehorizon.controllers
 import com.makkenzo.codehorizon.dtos.MentorshipApplicationRequestDTO
 import com.makkenzo.codehorizon.dtos.MessageResponseDTO
 import com.makkenzo.codehorizon.services.MentorshipApplicationService
-import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -19,22 +17,16 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "Mentorship", description = "Операции, связанные с менторством")
 @SecurityRequirement(name = "bearerAuth")
 class MentorshipController(
-    private val jwtUtils: JwtUtils,
     private val mentorshipApplicationService: MentorshipApplicationService
 ) {
     @PostMapping("/apply")
-    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Подать заявку на становление ментором")
+    @PreAuthorize("hasAuthority('mentorship_application:apply')")
     fun applyForMentorship(
-        request: HttpServletRequest,
         @Valid @RequestBody applicationRequestDTO: MentorshipApplicationRequestDTO
     ): ResponseEntity<Any> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(MessageResponseDTO("Требуется авторизация"))
-        val userId = jwtUtils.getIdFromToken(token)
-
         return try {
-            val application = mentorshipApplicationService.applyForMentorship(userId, applicationRequestDTO)
+            val application = mentorshipApplicationService.applyForMentorship(applicationRequestDTO)
             ResponseEntity.status(HttpStatus.CREATED).body(application)
         } catch (e: IllegalStateException) {
             ResponseEntity.status(HttpStatus.CONFLICT).body(MessageResponseDTO(e.message ?: "Ошибка подачи заявки"))
@@ -45,14 +37,10 @@ class MentorshipController(
     }
 
     @GetMapping("/application/my")
-    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Получить статус своей заявки на менторство")
-    fun getMyApplicationStatus(request: HttpServletRequest): ResponseEntity<Any> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(MessageResponseDTO("Требуется авторизация"))
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val application = mentorshipApplicationService.getUserApplication(userId)
+    @PreAuthorize("hasAuthority('mentorship_application:read:self')")
+    fun getMyApplicationStatus(): ResponseEntity<Any> {
+        val application = mentorshipApplicationService.getUserApplication()
         return if (application != null) {
             ResponseEntity.ok(application)
         } else {
@@ -64,11 +52,8 @@ class MentorshipController(
     @GetMapping("/application/my/active")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Проверить, есть ли активная заявка на менторство")
-    fun hasActiveApplication(request: HttpServletRequest): ResponseEntity<Map<String, Boolean>> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("hasActiveApplication" to false))
-        val userId = jwtUtils.getIdFromToken(token)
-        val hasActive = mentorshipApplicationService.hasActiveApplication(userId)
+    fun hasActiveApplication(): ResponseEntity<Map<String, Boolean>> {
+        val hasActive = mentorshipApplicationService.hasActiveApplication()
         return ResponseEntity.ok(mapOf("hasActiveApplication" to hasActive))
     }
 }

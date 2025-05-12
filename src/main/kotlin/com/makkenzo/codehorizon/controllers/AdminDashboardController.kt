@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/admin/dashboard")
 @Tag(name = "Admin - Dashboard", description = "Данные для дашборда админа")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('admin_dashboard:view')")
 class AdminDashboardController(
     private val reportingService: ReportingService
 ) {

@@ -13,23 +13,27 @@ import org.springframework.stereotype.Service
 @Service
 class WishlistService(
     private val wishlistRepository: WishlistRepository,
-    private val courseService: CourseService
+    private val courseService: CourseService,
+    private val authorizationService: AuthorizationService
 ) {
-    @CacheEvict(value = ["wishlist"], key = "#userId")
-    fun addToWishlist(userId: String, courseId: String) {
-        if (!wishlistRepository.existsByUserIdAndCourseId(userId, courseId)) {
-            wishlistRepository.save(WishlistItem(userId = userId, courseId = courseId))
+    @CacheEvict(value = ["wishlist"], key = "@authorizationService.getCurrentUserEntity().id")
+    fun addToWishlist(courseId: String) {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        if (!wishlistRepository.existsByUserIdAndCourseId(currentUserId, courseId)) {
+            wishlistRepository.save(WishlistItem(userId = currentUserId, courseId = courseId))
         }
     }
 
-    @CacheEvict(value = ["wishlist"], key = "#userId")
-    fun removeFromWishlist(userId: String, courseId: String) {
-        wishlistRepository.deleteByUserIdAndCourseId(userId, courseId)
+    @CacheEvict(value = ["wishlist"], key = "@authorizationService.getCurrentUserEntity().id")
+    fun removeFromWishlist(courseId: String) {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        wishlistRepository.deleteByUserIdAndCourseId(currentUserId, courseId)
     }
 
-    @Cacheable(value = ["wishlist"], key = "#userId")
-    fun getWishlist(userId: String, pageable: Pageable): PagedResponseDTO<CourseDTO> {
-        val wishlistItems = wishlistRepository.findByUserId(userId, pageable)
+    @Cacheable(value = ["wishlist"], key = "@authorizationService.getCurrentUserEntity().id")
+    fun getWishlist(pageable: Pageable): PagedResponseDTO<CourseDTO> {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        val wishlistItems = wishlistRepository.findByUserId(currentUserId, pageable)
         val courseIds = wishlistItems.content.map { it.courseId }
         val courses = courseService.findByIds(courseIds)
 
@@ -43,7 +47,8 @@ class WishlistService(
         )
     }
 
-    fun isCourseInWishlist(userId: String, courseId: String): Boolean {
-        return wishlistRepository.existsByUserIdAndCourseId(userId, courseId)
+    fun isCourseInWishlist(courseId: String): Boolean {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        return wishlistRepository.existsByUserIdAndCourseId(currentUserId, courseId)
     }
 }

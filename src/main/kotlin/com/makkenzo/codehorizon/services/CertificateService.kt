@@ -10,7 +10,6 @@ import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
-import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.ZoneId
@@ -23,7 +22,8 @@ class CertificateService(
     private val userRepository: UserRepository,
     private val courseRepository: CourseRepository,
     private val profileRepository: ProfileRepository,
-    private val pdfGenerationService: PdfGenerationService
+    private val pdfGenerationService: PdfGenerationService,
+    private val authorizationService: AuthorizationService
 ) {
     private val logger = LoggerFactory.getLogger(CertificateService::class.java)
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZoneId.systemDefault())
@@ -128,8 +128,9 @@ class CertificateService(
         return savedCertificate
     }
 
-    fun getCertificatesForUser(userId: String): List<CertificateDTO> {
-        return certificateRepository.findByUserId(userId).map { cert ->
+    fun getCertificatesForUser(): List<CertificateDTO> {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        return certificateRepository.findByUserId(currentUserId).map { cert ->
             CertificateDTO(
                 id = cert.id!!,
                 uniqueCertificateId = cert.uniqueCertificateId,
@@ -141,13 +142,9 @@ class CertificateService(
         }
     }
 
-    fun getCertificatePdfBytes(certificateId: String, requestingUserId: String): ByteArray {
+    fun getCertificatePdfBytes(certificateId: String): ByteArray {
         val certificate = certificateRepository.findById(certificateId)
             .orElseThrow { NotFoundException("Сертификат с ID $certificateId не найден") }
-
-        if (certificate.userId != requestingUserId) {
-            throw AccessDeniedException("У вас нет прав на скачивание этого сертификата")
-        }
 
         return pdfGenerationService.generateCertificatePdf(certificate)
     }

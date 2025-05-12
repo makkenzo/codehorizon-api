@@ -5,19 +5,19 @@ import com.makkenzo.codehorizon.dtos.PopularAuthorDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.dtos.UserProfileDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.services.AuthorizationService
 import com.makkenzo.codehorizon.services.CourseProgressService
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.services.UserService
-import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -25,9 +25,9 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "User")
 class UserController(
     private val userService: UserService,
-    private val jwtUtils: JwtUtils,
     private val courseProgressService: CourseProgressService,
-    private val courseService: CourseService
+    private val courseService: CourseService,
+    private val authorizationService: AuthorizationService
 ) {
     @GetMapping("/{username}/profile")
     @Operation(summary = "Получение профиля по username")
@@ -38,14 +38,12 @@ class UserController(
 
     @GetMapping("/me/courses")
     @Operation(summary = "Получить все курсы пользователя", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("hasAuthority('course:read:list:self_enrolled')")
     fun getAllMyCourses(
         @RequestParam(defaultValue = "1") page: Int,
-        @RequestParam(defaultValue = "10") size: Int,
-        request: HttpServletRequest
+        @RequestParam(defaultValue = "10") size: Int
     ): ResponseEntity<PagedResponseDTO<UserCourseDTO>> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
 
         val pageable: Pageable = PageRequest.of(
             page - 1, size, Sort.by(
@@ -53,20 +51,19 @@ class UserController(
             )
         )
 
-        val courses = courseProgressService.getUserCoursesWithProgress(userId, pageable)
+        val courses = courseProgressService.getUserCoursesWithProgress(currentUserId, pageable)
 
         return ResponseEntity.ok(courses)
     }
 
     @GetMapping("/me/courses/{courseId}/access")
     @Operation(summary = "Проверка на доступ к курсу", security = [SecurityRequirement(name = "bearerAuth")])
-    fun isCourseAccessible(@PathVariable courseId: String, request: HttpServletRequest): ResponseEntity<Boolean> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
+    @PreAuthorize("isAuthenticated()")
+    fun isCourseAccessible(@PathVariable courseId: String): ResponseEntity<Boolean> {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
 
         return try {
-            val hasAccess = courseService.checkUserAccessToCourse(courseId, userId)
+            val hasAccess = courseService.checkUserAccessToCourse(courseId, currentUserId)
             ResponseEntity.ok(hasAccess)
         } catch (e: NotFoundException) {
             ResponseEntity.notFound().build()

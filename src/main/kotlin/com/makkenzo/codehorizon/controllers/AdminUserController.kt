@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/admin/users")
 @Tag(name = "Admin - Users", description = "Управление пользователями (только для админов)")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
 class AdminUserController(private val userService: UserService) {
     @GetMapping
     @Operation(summary = "Получить список пользователей (Admin)")
+    @PreAuthorize("hasAuthority('user:admin:read:any')")
     fun getAllUsers(
         @RequestParam(defaultValue = "1") @Parameter(description = "Номер страницы (начиная с 1)") page: Int,
         @RequestParam(defaultValue = "20") @Parameter(description = "Количество элементов на странице") size: Int
@@ -36,22 +36,15 @@ class AdminUserController(private val userService: UserService) {
 
     @GetMapping("/{id}")
     @Operation(summary = "Получить пользователя по ID (Admin)")
+    @PreAuthorize("hasAuthority('user:admin:read:any')")
     fun getUserById(@PathVariable id: String): ResponseEntity<AdminUserDTO> {
-        val user = userService.getUserById(id)
-
-        val userDTO = AdminUserDTO(
-            id = user.id!!,
-            username = user.username,
-            email = user.email,
-            isVerified = user.isVerified,
-            roles = user.roles
-        )
-
+        val userDTO = userService.getUserByIdForAdmin(id)
         return ResponseEntity.ok(userDTO)
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Обновить пользователя (Admin)")
+    @PreAuthorize("hasAuthority('user:admin:edit:any') and hasAuthority('user:admin:edit_roles')")
     fun updateUser(
         @PathVariable id: String,
         @Valid @RequestBody request: AdminUpdateUserRequestDTO

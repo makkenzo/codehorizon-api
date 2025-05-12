@@ -3,14 +3,12 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Pageable
-import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -21,7 +19,8 @@ class CourseProgressService(
     private val userRepository: UserRepository,
     private val courseService: CourseService,
     private val courseRepository: CourseRepository,
-    private val certificateService: CertificateService
+    private val certificateService: CertificateService,
+    private val authorizationService: AuthorizationService
 ) {
     private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
 
@@ -63,11 +62,12 @@ class CourseProgressService(
         val progress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
         return progress?.progress
     }
-    
+
     @Transactional
-    fun markLessonAsComplete(userId: String, courseId: String, lessonId: String): CourseProgress {
-        val courseProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
-            ?: throw NotFoundException("Прогресс для пользователя $userId и курса $courseId не найден. Возможно, нет доступа?")
+    fun markLessonAsComplete(courseId: String, lessonId: String): CourseProgress {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        val courseProgress = courseProgressRepository.findByUserIdAndCourseId(currentUserId, courseId)
+            ?: throw NotFoundException("Прогресс для пользователя $currentUserId и курса $courseId не найден. Возможно, нет доступа?")
 
         val course = courseRepository.findById(courseId)
             .orElseThrow { NotFoundException("Курс с ID $courseId не найден для расчета прогресса") }
@@ -95,15 +95,15 @@ class CourseProgressService(
             logger.info(
                 "Прогресс курса {} для пользователя {} достиг 100%. Попытка создания сертификата.",
                 courseId,
-                userId
+                currentUserId
             )
             try {
-                certificateService.createCertificateRecord(userId, courseId)
+                certificateService.createCertificateRecord(currentUserId, courseId)
             } catch (e: Exception) {
                 logger.error(
                     "Не удалось создать запись о сертификате для курса {} пользователя {}: {}",
                     courseId,
-                    userId,
+                    currentUserId,
                     e.message,
                     e
                 )
@@ -113,7 +113,8 @@ class CourseProgressService(
         return savedProgress
     }
 
-    fun getUserProgressByCourse(userId: String, courseId: String): CourseProgress? {
-        return courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
+    fun getUserProgressByCourse(courseId: String): CourseProgress? {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        return courseProgressRepository.findByUserIdAndCourseId(currentUserId, courseId)
     }
 }

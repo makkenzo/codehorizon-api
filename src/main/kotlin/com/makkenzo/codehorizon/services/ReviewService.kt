@@ -26,17 +26,17 @@ class ReviewService(
     private val userRepository: UserRepository,
     private val profileRepository: ProfileRepository,
     private val courseRepository: CourseRepository,
-    private val mongoTemplate: MongoTemplate
+    private val mongoTemplate: MongoTemplate,
+    private val authorizationService: AuthorizationService
 ) {
     @Transactional
     @CacheEvict(value = ["courses"], key = "#slug")
-    fun createReview(courseId: String, authorId: String, dto: CreateReviewRequestDTO, slug: String): ReviewDTO {
-        if (!courseProgressRepository.existsByUserIdAndCourseId(
-                authorId,
-                courseId
-            )
-        ) {
-            throw AccessDeniedException("У вас нет доступа для оставления отзыва на этот курс.")
+    fun createReview(courseId: String, dto: CreateReviewRequestDTO, slug: String): ReviewDTO {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val authorId = currentUser.id!!
+
+        if (!courseProgressRepository.existsByUserIdAndCourseId(authorId, courseId)) {
+            throw AccessDeniedException("У вас нет доступа для оставления отзыва на этот курс (вы не записаны).")
         }
 
         if (reviewRepository.existsByAuthorIdAndCourseId(authorId, courseId)) {
@@ -54,9 +54,7 @@ class ReviewService(
             text = dto.text
         )
         val savedReview = reviewRepository.save(review)
-
         updateCourseAverageRating(courseId)
-
         return mapReviewToDTO(savedReview)
     }
 
@@ -75,11 +73,11 @@ class ReviewService(
     }
 
     @Transactional
-    fun updateReview(reviewId: String, userId: String, dto: UpdateReviewRequestDTO): ReviewDTO {
+    fun updateReview(reviewId: String, dto: UpdateReviewRequestDTO): ReviewDTO {
         val review = reviewRepository.findById(reviewId)
             .orElseThrow { NotFoundException("Отзыв с ID $reviewId не найден") }
 
-        if (review.authorId != userId) {
+        if (!authorizationService.canEditOwnReview(review.authorId)) {
             throw AccessDeniedException("Вы не можете редактировать этот отзыв.")
         }
 
@@ -97,12 +95,11 @@ class ReviewService(
     }
 
     @Transactional
-    fun deleteReview(reviewId: String, userId: String) {
+    fun deleteReview(reviewId: String) {
         val review = reviewRepository.findById(reviewId)
             .orElseThrow { NotFoundException("Отзыв с ID $reviewId не найден") }
 
-
-        if (review.authorId != userId) {
+        if (!authorizationService.canDeleteOwnReview(review.authorId)) {
             throw AccessDeniedException("Вы не можете удалить этот отзыв.")
         }
 
@@ -112,7 +109,6 @@ class ReviewService(
     }
 
     fun getReviewsWithDistribution(courseId: String, pageable: Pageable): ReviewsWithDistributionDTO {
-
         val reviewPage: Page<Review> = reviewRepository.findByCourseId(courseId, pageable)
         val reviewDTOs = reviewPage.content.map { mapReviewToDTO(it) }
         val pagedReviews = PagedResponseDTO(
@@ -171,9 +167,10 @@ class ReviewService(
         return calculateRatingDistribution(courseId)
     }
 
-    fun getReviewByAuthorAndCourse(authorId: String, courseId: String): ReviewDTO {
+    fun getReviewByAuthorAndCourse(courseId: String): ReviewDTO {
+        val authorId = authorizationService.getCurrentUserEntity().id!!
         val review = reviewRepository.findByAuthorIdAndCourseId(authorId, courseId)
-            ?: throw NotFoundException("Отзыв пользователя $authorId для курса $courseId не найден.")
+            ?: throw NotFoundException("Ваш отзыв для курса $courseId не найден.")
         return mapReviewToDTO(review)
     }
 

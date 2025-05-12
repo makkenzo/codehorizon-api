@@ -41,18 +41,32 @@ class CourseService(
     private val mongoTemplate: MongoTemplate,
     private val courseProgressRepository: CourseProgressRepository,
     private val mediaProcessingService: MediaProcessingService,
-    private val cloudflareService: CloudflareService
+    private val cloudflareService: CloudflareService,
+    private val authorizationService: AuthorizationService
 ) {
     fun findAllCoursesAdmin(
         pageable: Pageable,
         titleSearch: String?,
-        authorIdFilter: String?
+        authorIdParamFromRequest: String?
     ): PagedResponseDTO<AdminCourseListItemDTO> {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val canReadAny = authorizationService.canReadAnyCourseListForAdmin()
+        val canReadOwn = authorizationService.canReadOwnCreatedCourseListForAdmin()
+
+        val effectiveAuthorIdFilter: String?
+        if (canReadAny) {
+            effectiveAuthorIdFilter = authorIdParamFromRequest
+        } else if (canReadOwn) {
+            effectiveAuthorIdFilter = currentUser.id!!
+        } else {
+            throw AccessDeniedException("У вас нет прав для просмотра этого списка курсов.")
+        }
+
         val criteria = Criteria.where("deletedAt").`is`(null)
         titleSearch?.let {
             criteria.and("title").regex(it, "i")
         }
-        authorIdFilter?.let { criteria.and("authorId").`is`(it) }
+        effectiveAuthorIdFilter?.let { criteria.and("authorId").`is`(it) }
 
         val query = Query(criteria).with(pageable)
         val totalElements = mongoTemplate.count(Query(criteria), Course::class.java)
@@ -131,18 +145,32 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
-    fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO, creatorUserId: String): AdminCourseDetailDTO {
-        val author = userRepository.findById(request.authorId)
-            .orElseThrow { ResponseStatusException(HttpStatus.BAD_REQUEST, "Автор с ID ${request.authorId} не найден") }
+    fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
+        val creatorUser = authorizationService.getCurrentUserEntity()
+        var effectiveAuthorId = request.authorId
 
-        val creatorUser = userRepository.findById(creatorUserId).orElseThrow {
-            ResponseStatusException(HttpStatus.BAD_REQUEST, "Пользователь с ID $creatorUserId не найден")
-        }
-        if (creatorUser.roles.contains("ROLE_MENTOR") && !creatorUser.roles.contains("ROLE_ADMIN")) {
-            if (request.authorId != creatorUserId) {
-                throw AccessDeniedException("Внутренняя ошибка: Менторы могут создавать курсы только от своего имени.")
+        if (authorizationService.isCurrentUserMentor() && !authorizationService.isCurrentUserAdmin()) {
+            if (request.authorId.isNotBlank() && request.authorId != creatorUser.id) {
+                throw AccessDeniedException("Менторы могут создавать курсы только от своего имени.")
             }
+            effectiveAuthorId = creatorUser.id!!
+        } else if (authorizationService.isCurrentUserAdmin()) {
+            if (request.authorId.isBlank()) {
+                throw IllegalArgumentException("Администратор должен указать автора курса при создании.")
+            }
+            userRepository.findById(request.authorId)
+                .orElseThrow {
+                    ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Автор с ID ${request.authorId} не найден"
+                    )
+                }
+        } else {
+            throw AccessDeniedException("У вас нет прав для создания курса.")
         }
+
+        val author = userRepository.findById(effectiveAuthorId)
+            .orElseThrow { ResponseStatusException(HttpStatus.BAD_REQUEST, "Автор с ID $effectiveAuthorId не найден") }
 
         val isFreeCourse = request.isFree ?: false
 
@@ -155,7 +183,7 @@ class CourseService(
             price = if (isFreeCourse) 0.0 else request.price,
             discount = if (isFreeCourse) 0.0 else request.discount ?: 0.0,
             isFree = isFreeCourse,
-            authorId = request.authorId,
+            authorId = effectiveAuthorId,
             difficulty = request.difficulty,
             category = request.category,
             imagePreview = request.imagePreview,
@@ -173,16 +201,13 @@ class CourseService(
 
         val savedCourse = courseRepository.save(newCourse)
 
-        if (author.id != creatorUserId && !author.createdCourseIds.contains(savedCourse.id!!)) {
-            author.createdCourseIds.add(savedCourse.id)
-            userRepository.save(author)
-        } else if (author.id == creatorUserId && !author.createdCourseIds.contains(savedCourse.id!!)) {
+        if (!author.createdCourseIds.contains(savedCourse.id!!)) {
             author.createdCourseIds.add(savedCourse.id)
             userRepository.save(author)
         }
 
         mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)
-        return getCourseDetailsAdmin(savedCourse.id)
+        return getCourseDetailsAdmin(savedCourse.id!!)
     }
 
     fun findByIds(courseIds: List<String>): List<CourseDTO> {
@@ -496,14 +521,15 @@ class CourseService(
             ?: throw NotFoundException("Lesson not found with id: $lessonId")
     }
 
-    fun getAccessibleCourseForLearning(courseId: String, userId: String): Course {
+    fun getAccessibleCourseForLearning(courseId: String): Course {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Курс с ID $courseId не найден")
 
-        val hasProgress = courseProgressRepository.existsByUserIdAndCourseId(userId, courseId)
+        val hasProgress = courseProgressRepository.existsByUserIdAndCourseId(currentUserId, courseId)
 
         if (!course.isFree && !hasProgress) {
-            throw AccessDeniedException("У вас нет доступа к этому курсу.")
+            throw AccessDeniedException("У вас нет доступа к этому курсу (не куплен/не записан).")
         }
 
         return course
@@ -517,7 +543,8 @@ class CourseService(
     }
 
     @Transactional
-    fun enrollFreeCourse(userId: String, courseId: String): CourseProgress {
+    fun enrollFreeCourse(courseId: String): CourseProgress {
+        val currentUserId = authorizationService.getCurrentUserEntity().id!!
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Курс с ID $courseId не найден")
 
@@ -525,60 +552,48 @@ class CourseService(
             throw IllegalArgumentException("Этот курс не является бесплатным и требует оплаты.")
         }
 
-        val existingProgress = courseProgressRepository.findByUserIdAndCourseId(userId, courseId)
+        val existingProgress = courseProgressRepository.findByUserIdAndCourseId(currentUserId, courseId)
         if (existingProgress != null) {
             return existingProgress
         }
 
-        val newProgress = CourseProgress(userId = userId, courseId = courseId, progress = 0.0)
+        val newProgress = CourseProgress(userId = currentUserId, courseId = courseId, progress = 0.0)
         return courseProgressRepository.save(newProgress)
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
     fun updateCourseAdminOrMentor(
         courseId: String,
-        request: AdminCreateUpdateCourseRequestDTO,
-        currentUserId: String
+        request: AdminCreateUpdateCourseRequestDTO
     ): AdminCourseDetailDTO {
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Course not found with id: $courseId")
 
-        checkPermission(course.authorId, currentUserId, "обновить этот курс")
+        if (authorizationService.isCurrentUserMentor() && !authorizationService.isCurrentUserAdmin()) {
+            if (request.authorId != course.authorId) {
+                throw AccessDeniedException("Менторы не могут изменять автора курса.")
+            }
+        } else if (authorizationService.isCurrentUserAdmin() && request.authorId != course.authorId) {
+            userRepository.findById(request.authorId)
+                .orElseThrow {
+                    ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Новый автор с ID ${request.authorId} не найден"
+                    )
+                }
 
-        val currentUser = userRepository.findById(currentUserId).orElseThrow {
-            ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден")
+            val oldAuthor = userRepository.findById(course.authorId).orElse(null)
+            oldAuthor?.let {
+                if (it.createdCourseIds.remove(courseId)) userRepository.save(it)
+            }
+            val newAuthor = userRepository.findById(request.authorId).get()
+            if (!newAuthor.createdCourseIds.contains(courseId)) {
+                newAuthor.createdCourseIds.add(courseId)
+                userRepository.save(newAuthor)
+            }
         }
-
-        if ((currentUser.roles.contains("ROLE_MENTOR") && !currentUser.roles.contains("ROLE_ADMIN")) &&
-            request.authorId != course.authorId
-        ) {
-            throw AccessDeniedException("Менторы не могут изменять автора курса.")
-        }
-
 
         val isNowFree = request.isFree ?: course.isFree
-
-        if ((currentUser.roles.contains("ROLE_ADMIN")) && request.authorId != course.authorId) {
-            if (!userRepository.existsById(request.authorId)) {
-                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Новый автор с ID ${request.authorId} не найден")
-            }
-            val oldAuthorId = course.authorId
-            val oldAuthor = userRepository.findById(oldAuthorId).orElse(null)
-
-            oldAuthor?.let {
-                if (it.createdCourseIds.remove(courseId)) {
-                    userRepository.save(it)
-                }
-            }
-
-            val newAuthor = userRepository.findById(request.authorId).orElse(null)
-            newAuthor?.let {
-                if (!it.createdCourseIds.contains(courseId)) {
-                    it.createdCourseIds.add(courseId)
-                    userRepository.save(it)
-                }
-            }
-        }
 
         val newSlug = if (course.title != request.title) {
             SlugUtils.generateUniqueSlug(request.title) { newSlug ->
@@ -632,11 +647,9 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
-    fun deleteCourseAdminOrMentor(courseId: String, currentUserId: String) {
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден") }
-
-        checkPermission(course.authorId, currentUserId, "удалить этот курс")
+    fun deleteCourseAdminOrMentor(courseId: String) {
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Курс $courseId не найден")
 
         course.imagePreview?.let { cloudflareService.deleteFileFromR2Async(it) }
         course.videoPreview?.let { cloudflareService.deleteFileFromR2Async(it) }
@@ -653,20 +666,17 @@ class CourseService(
             userRepository.save(it)
         }
 
-        val updatedCourse = course.copy(deletedAt = Instant.now())
-        courseRepository.save(updatedCourse)
+        courseRepository.save(course.copy(deletedAt = Instant.now()))
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
     fun addLessonAdminOrMentor(
         courseId: String,
-        lessonDto: AdminCreateUpdateLessonRequestDTO,
-        currentUserId: String
+        lessonDto: AdminCreateUpdateLessonRequestDTO
     ): AdminCourseDetailDTO {
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId) ?: throw NotFoundException(
             "Course not found with id: $courseId"
         )
-        checkPermission(course.authorId, currentUserId, "добавить урок в этот курс")
 
         val lessonSlug = SlugUtils.generateUniqueSlug(lessonDto.title) { slug ->
             course.lessons.any { it.slug == slug }
@@ -702,13 +712,10 @@ class CourseService(
     fun updateLessonAdminOrMentor(
         courseId: String,
         lessonId: String,
-        lessonDto: AdminCreateUpdateLessonRequestDTO,
-        currentUserId: String
+        lessonDto: AdminCreateUpdateLessonRequestDTO
     ): AdminCourseDetailDTO {
-        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId) ?: throw NotFoundException(
-            "Course not found with id: $courseId"
-        )
-        checkPermission(course.authorId, currentUserId, "обновить урок в этом курсе")
+        val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+            ?: throw NotFoundException("Курс $courseId не найден")
 
         val lessonIndex = course.lessons.indexOfFirst { it.id == lessonId }
         if (lessonIndex == -1) throw ResponseStatusException(
@@ -763,10 +770,9 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], key = "#courseId")
-    fun deleteLessonAdminOrMentor(courseId: String, lessonId: String, currentUserId: String) {
+    fun deleteLessonAdminOrMentor(courseId: String, lessonId: String) {
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
-            ?: throw NotFoundException("Course not found with id: $courseId")
-        checkPermission(course.authorId, currentUserId, "удалить урок из этого курса")
+            ?: throw NotFoundException("Курс $courseId не найден")
 
         val lessonToRemove = course.lessons.find { it.id == lessonId }
         val removed = course.lessons.removeIf { it.id == lessonId }
@@ -782,13 +788,10 @@ class CourseService(
 
     fun getStudentProgressForCourse(
         courseId: String,
-        requestingUserId: String,
         pageable: Pageable
     ): PagedResponseDTO<StudentProgressDTO> {
         val course = courseRepository.findById(courseId)
             .orElseThrow { NotFoundException("Курс с ID $courseId не найден") }
-
-        checkPermission(course.authorId, requestingUserId, "просматривать прогресс студентов")
 
         val query = Query(Criteria.where("courseId").`is`(courseId)).with(pageable)
 
@@ -842,16 +845,5 @@ class CourseService(
             totalPages = totalPages,
             isLast = isLast
         )
-    }
-
-    private fun checkPermission(courseAuthorId: String, currentUserId: String, actionDescription: String) {
-        val currentUser = userRepository.findById(currentUserId)
-            .orElseThrow { AccessDeniedException("Пользователь не найден, действие запрещено.") }
-
-        val isAdmin = currentUser.roles.contains("ROLE_ADMIN") || currentUser.roles.contains("ADMIN")
-
-        if (!isAdmin && courseAuthorId != currentUserId) {
-            throw AccessDeniedException("У вас нет прав, чтобы $actionDescription.")
-        }
     }
 }

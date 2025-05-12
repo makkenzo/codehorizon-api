@@ -1,19 +1,21 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.services.CourseService
 import com.makkenzo.codehorizon.services.ReviewService
 import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -22,7 +24,8 @@ import org.springframework.web.bind.annotation.*
 class ReviewController(
     private val reviewService: ReviewService,
     private val jwtUtils: JwtUtils,
-    private val courseService: CourseService
+    private val courseService: CourseService,
+    private val courseRepository: CourseRepository
 ) {
     @GetMapping
     @Operation(summary = "Получить отзывы для курса")
@@ -56,60 +59,48 @@ class ReviewController(
 
     @PostMapping
     @Operation(summary = "Создать отзыв для курса", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("hasAuthority('review:create')")
     fun createReview(
         @PathVariable courseId: String,
-        @Valid @RequestBody reviewDto: CreateReviewRequestDTO,
-        request: HttpServletRequest
+        @Valid @RequestBody reviewDto: CreateReviewRequestDTO
     ): ResponseEntity<ReviewDTO> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс $courseId не найден") }
 
-        val course = courseService.getCourseById(courseId)
-        val courseSlug = course.slug
-
-        val createdReview = reviewService.createReview(courseId, userId, reviewDto, courseSlug)
+        val createdReview = reviewService.createReview(courseId, reviewDto, course.slug)
         return ResponseEntity.status(HttpStatus.CREATED).body(createdReview)
     }
 
     @PutMapping("/{reviewId}")
     @Operation(summary = "Обновить свой отзыв", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("@authorizationService.canEditOwnReview(#reviewId)")
     fun updateReview(
         @PathVariable courseId: String,
         @PathVariable reviewId: String,
-        @Valid @RequestBody reviewDto: UpdateReviewRequestDTO,
-        request: HttpServletRequest
+        @Valid @RequestBody reviewDto: UpdateReviewRequestDTO
     ): ResponseEntity<ReviewDTO> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value ?: throw IllegalArgumentException("...")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val updatedReview = reviewService.updateReview(reviewId, userId, reviewDto)
+        val updatedReview = reviewService.updateReview(reviewId, reviewDto)
         return ResponseEntity.ok(updatedReview)
     }
 
     @DeleteMapping("/{reviewId}")
     @Operation(summary = "Удалить свой отзыв", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("@authorizationService.canDeleteOwnReview(#reviewId)")
     fun deleteReview(
         @PathVariable courseId: String,
-        @PathVariable reviewId: String,
-        request: HttpServletRequest
+        @PathVariable reviewId: String
     ): ResponseEntity<Void> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value ?: throw IllegalArgumentException("...")
-        val userId = jwtUtils.getIdFromToken(token)
-
-        reviewService.deleteReview(reviewId, userId)
+        reviewService.deleteReview(reviewId)
         return ResponseEntity.noContent().build()
     }
 
     @GetMapping("/me")
     @Operation(summary = "Получить свой отзыв для курса", security = [SecurityRequirement(name = "bearerAuth")])
+    @PreAuthorize("isAuthenticated()")
     fun getMyReviewForCourse(
-        @PathVariable courseId: String,
-        request: HttpServletRequest
+        @PathVariable courseId: String
     ): ResponseEntity<ReviewDTO> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value ?: throw IllegalArgumentException("...")
-        val userId = jwtUtils.getIdFromToken(token)
-        val review = reviewService.getReviewByAuthorAndCourse(userId, courseId)
+        val review = reviewService.getReviewByAuthorAndCourse(courseId)
         return ResponseEntity.ok(review)
     }
 }

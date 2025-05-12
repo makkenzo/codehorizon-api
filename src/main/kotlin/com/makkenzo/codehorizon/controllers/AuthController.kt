@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.configs.CookieConfig
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.services.AuthorizationService
 import com.makkenzo.codehorizon.services.EmailService
 import com.makkenzo.codehorizon.services.TokenBlacklistService
 import com.makkenzo.codehorizon.services.UserService
@@ -11,12 +12,12 @@ import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -27,7 +28,8 @@ class AuthController(
     private val jwtUtils: JwtUtils,
     private val emailService: EmailService,
     private val tokenBlacklistService: TokenBlacklistService,
-    private val cookieProperties: CookieConfig
+    private val cookieProperties: CookieConfig,
+    private val authorizationService: AuthorizationService
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
@@ -119,11 +121,9 @@ class AuthController(
 
     @GetMapping("/me")
     @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
-    fun getMe(request: HttpServletRequest): ResponseEntity<User> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: throw IllegalArgumentException("Access token cookie is missing")
-        val userId = jwtUtils.getIdFromToken(token)
-        val user = userService.getUserById(userId)
+    @PreAuthorize("hasAuthority('user:read:self')")
+    fun getMe(): ResponseEntity<User> {
+        val user = authorizationService.getCurrentUserEntity()
         return ResponseEntity.ok(user)
     }
 
@@ -157,7 +157,7 @@ class AuthController(
     }
 
     @PostMapping("/reset-password/check-login")
-    @Operation(summary = "Поиск логина для сброса пароля", security = [SecurityRequirement(name = "bearerAuth")])
+    @Operation(summary = "Поиск логина для сброса пароля")
     fun checkLoginValidity(@Valid @RequestBody request: CheckLoginRequestDTO): ResponseEntity<MessageResponseDTO> {
         val user = userService.findByLogin(request.login) ?: return ResponseEntity.notFound().build()
 
@@ -170,13 +170,16 @@ class AuthController(
     @Operation(summary = "Сброс пароля", security = [SecurityRequirement(name = "bearerAuth")])
     fun resetPassword(
         @Valid @RequestBody body: ResetPasswordRequestDTO,
-        request: HttpServletRequest
+        @RequestHeader("Authorization") authorizationHeader: String
     ): ResponseEntity<User> {
-        val header = request.getHeader("Authorization")
-            ?: throw IllegalArgumentException("Authorization header is missing")
-        val token = header.substring(7).trim()
+        val token = authorizationHeader.substringAfter("Bearer ").trim()
+        if (!jwtUtils.validateToken(token) || jwtUtils.getActionFromToken(token) != MailActionEnum.RESET_PASSWORD) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(null)
+        }
+
         val email = jwtUtils.getSubjectFromToken(token)
-        val user = userService.findByLogin(email) ?: return ResponseEntity.notFound().build()
+        val user = userService.findByEmail(email)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null)
 
         val newUser = userService.resetPassword(user, body.password, body.confirmPassword)
 

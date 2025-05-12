@@ -7,12 +7,10 @@ import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.ApplicationStatus
 import com.makkenzo.codehorizon.services.MentorshipApplicationService
-import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -26,13 +24,12 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/admin/mentorship/applications")
 @Tag(name = "Admin - Mentorship Applications", description = "Управление заявками на менторство")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
 class AdminMentorshipController(
     private val mentorshipApplicationService: MentorshipApplicationService,
-    private val jwtUtils: JwtUtils
 ) {
     @GetMapping
     @Operation(summary = "Получить список всех заявок на менторство")
+    @PreAuthorize("hasAuthority('mentorship_application:admin:read:any')")
     fun getAllApplications(
         @RequestParam(required = false) status: ApplicationStatus?,
         @RequestParam(defaultValue = "1") @Parameter(description = "Номер страницы (начиная с 1)") page: Int,
@@ -55,16 +52,12 @@ class AdminMentorshipController(
 
     @PutMapping("/{applicationId}/approve")
     @Operation(summary = "Одобрить заявку на менторство")
+    @PreAuthorize("hasAuthority('mentorship_application:admin:approve')")
     fun approveApplication(
         @PathVariable applicationId: String,
-        request: HttpServletRequest
     ): ResponseEntity<Any> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(MessageResponseDTO("Требуется авторизация"))
-
-        val adminUserId = jwtUtils.getIdFromToken(token)
         return try {
-            val approvedApplication = mentorshipApplicationService.approveApplication(applicationId, adminUserId)
+            val approvedApplication = mentorshipApplicationService.approveApplication(applicationId)
             ResponseEntity.ok(approvedApplication)
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(MessageResponseDTO(e.message ?: "Заявка не найдена"))
@@ -76,17 +69,14 @@ class AdminMentorshipController(
 
     @PutMapping("/{applicationId}/reject")
     @Operation(summary = "Отклонить заявку на менторство")
+    @PreAuthorize("hasAuthority('mentorship_application:admin:reject')")
     fun rejectApplication(
         @PathVariable applicationId: String,
         @Valid @RequestBody requestBody: AdminMentorshipApplicationUpdateRequestDTO,
-        request: HttpServletRequest
     ): ResponseEntity<Any> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(MessageResponseDTO("Требуется авторизация"))
-        val adminUserId = jwtUtils.getIdFromToken(token)
         return try {
             val rejectedApplication =
-                mentorshipApplicationService.rejectApplication(applicationId, adminUserId, requestBody.rejectionReason)
+                mentorshipApplicationService.rejectApplication(applicationId, requestBody.rejectionReason)
             ResponseEntity.ok(rejectedApplication)
         } catch (e: NotFoundException) {
             ResponseEntity.status(HttpStatus.NOT_FOUND).body(MessageResponseDTO(e.message ?: "Заявка не найдена"))

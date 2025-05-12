@@ -6,7 +6,6 @@ import com.makkenzo.codehorizon.utils.JwtUtils
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -27,29 +26,20 @@ class CertificateController(
 ) {
     @GetMapping("/users/me/certificates")
     @Operation(summary = "Получить список сертификатов текущего пользователя")
-    @PreAuthorize("isAuthenticated()")
-    fun getMyCertificates(request: HttpServletRequest): ResponseEntity<List<CertificateDTO>> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        val userId = jwtUtils.getIdFromToken(token)
-
-        val certificates = certificateService.getCertificatesForUser(userId)
+    @PreAuthorize("hasAuthority('certificate:read:self')")
+    fun getMyCertificates(): ResponseEntity<List<CertificateDTO>> {
+        val certificates = certificateService.getCertificatesForUser()
         return ResponseEntity.ok(certificates)
     }
 
     @GetMapping("/certificates/{certificateId}/download")
     @Operation(summary = "Скачать PDF сертификат по ID")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@authorizationService.canDownloadCertificate(#certificateId)")
     fun downloadCertificate(
-        @PathVariable certificateId: String,
-        request: HttpServletRequest
+        @PathVariable certificateId: String
     ): ResponseEntity<ByteArray> {
-        val token = request.cookies?.find { it.name == "access_token" }?.value
-            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        val userId = jwtUtils.getIdFromToken(token)
-
         try {
-            val pdfBytes = certificateService.getCertificatePdfBytes(certificateId, userId)
+            val pdfBytes = certificateService.getCertificatePdfBytes(certificateId)
             val headers = HttpHeaders()
             headers.contentType = MediaType.APPLICATION_PDF
             headers.setContentDispositionFormData("attachment", "certificate-$certificateId.pdf")

@@ -23,7 +23,8 @@ import java.time.Instant
 class MentorshipApplicationService(
     private val applicationRepository: MentorshipApplicationRepository,
     private val userRepository: UserRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val authorizationService: AuthorizationService
 ) {
     private val logger = LoggerFactory.getLogger(MentorshipApplicationService::class.java)
 
@@ -31,22 +32,14 @@ class MentorshipApplicationService(
         return applicationRepository.existsByUserIdAndStatus(userId, ApplicationStatus.PENDING)
     }
 
-    @Transactional
-    fun applyForMentorship(userId: String, requestDTO: MentorshipApplicationRequestDTO): MentorshipApplicationDTO {
-        val user = userRepository.findById(userId)
-            .orElseThrow { NotFoundException("Пользователь с ID $userId не найден") }
-
-        if (user.roles.contains("ROLE_MENTOR") || user.roles.contains("MENTOR")) {
-            throw IllegalStateException("Пользователь уже является ментором.")
-        }
-        if (hasActiveApplication(userId)) {
-            throw IllegalStateException("У вас уже есть активная заявка на рассмотрении.")
-        }
+    fun applyForMentorship(requestDTO: MentorshipApplicationRequestDTO): MentorshipApplicationDTO {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val userId = currentUser.id!!
 
         val application = MentorshipApplication(
-            userId = user.id!!,
-            username = user.username,
-            userEmail = user.email,
+            userId = userId,
+            username = currentUser.username,
+            userEmail = currentUser.email,
             reason = requestDTO.reason
         )
         val savedApplication = applicationRepository.save(application)
@@ -64,8 +57,14 @@ class MentorshipApplicationService(
         return mapToDTO(savedApplication)
     }
 
-    fun getUserApplication(userId: String): MentorshipApplicationDTO? {
+    fun getUserApplication(): MentorshipApplicationDTO? {
+        val userId = authorizationService.getCurrentUserEntity().id!!
         return applicationRepository.findByUserId(userId)?.let { mapToDTO(it) }
+    }
+
+    fun hasActiveApplication(): Boolean {
+        val userId = authorizationService.getCurrentUserEntity().id!!
+        return applicationRepository.existsByUserIdAndStatus(userId, ApplicationStatus.PENDING)
     }
 
     fun getAllApplications(status: ApplicationStatus?, pageable: Pageable): PagedResponseDTO<MentorshipApplicationDTO> {
@@ -85,13 +84,15 @@ class MentorshipApplicationService(
     }
 
     @Transactional
-    fun approveApplication(applicationId: String, adminUserId: String): MentorshipApplicationDTO {
+    fun approveApplication(applicationId: String): MentorshipApplicationDTO {
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Заявка с ID $applicationId не найдена") }
 
         if (application.status != ApplicationStatus.PENDING) {
             throw IllegalStateException("Заявка уже была рассмотрена. Текущий статус: ${application.status}")
         }
+
+        val adminUserId = authorizationService.getCurrentUserEntity().id!!
 
         val user = userRepository.findById(application.userId)
             .orElseThrow { NotFoundException("Пользователь заявки с ID ${application.userId} не найден") }
@@ -136,9 +137,10 @@ class MentorshipApplicationService(
     @Transactional
     fun rejectApplication(
         applicationId: String,
-        adminUserId: String,
         rejectionReason: String?
     ): MentorshipApplicationDTO {
+        val adminUserId = authorizationService.getCurrentUserEntity().id!!
+        
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Заявка с ID $applicationId не найдена") }
 
@@ -159,7 +161,7 @@ class MentorshipApplicationService(
             adminUserId,
             rejectionReason ?: "Не указана"
         )
-        
+
         eventPublisher.publishEvent(
             MentorshipApplicationRejectedEvent(
                 this,
