@@ -21,5 +21,6 @@ data class User(
     val wishlistId: String? = null,
     val accountSettings: AccountSettings? = null,
     @Indexed
-    val createdAt: Instant = Instant.now()
+    val createdAt: Instant = Instant.now(),
+    val authorities: List<String>? = null
 )

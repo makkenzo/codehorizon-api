@@ -122,9 +122,28 @@ class AuthController(
     @GetMapping("/me")
     @Operation(summary = "Получить пользователя", security = [SecurityRequirement(name = "bearerAuth")])
     @PreAuthorize("hasAuthority('user:read:self')")
-    fun getMe(): ResponseEntity<User> {
-        val user = authorizationService.getCurrentUserEntity()
-        return ResponseEntity.ok(user)
+    fun getMe(): ResponseEntity<UserDTOWithPermissions> {
+        val currentUserEntity = authorizationService.getCurrentUserEntity()
+        val userDetails = authorizationService.getCurrentUserDetails()
+
+        val permissions = userDetails.authorities
+            .filter { it.authority.startsWith("ROLE_").not() }
+            .map { it.authority }
+            .toList()
+
+        val userDto = UserDTOWithPermissions(
+            id = currentUserEntity.id!!,
+            isVerified = currentUserEntity.isVerified,
+            username = currentUserEntity.username,
+            email = currentUserEntity.email,
+            roles = currentUserEntity.roles,
+            createdCourseIds = currentUserEntity.createdCourseIds,
+            wishlistId = currentUserEntity.wishlistId,
+            accountSettings = currentUserEntity.accountSettings,
+            createdAt = currentUserEntity.createdAt,
+            permissions = permissions
+        )
+        return ResponseEntity.ok(userDto)
     }
 
     @DeleteMapping("/session")
