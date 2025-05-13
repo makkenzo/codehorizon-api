@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.models
 
 import com.makkenzo.codehorizon.dtos.NotificationDTO
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
 
@@ -16,6 +17,8 @@ enum class NotificationType {
 }
 
 @Document(collection = "notifications")
+@CompoundIndex(name = "user_created_idx", def = "{'userId': 1, 'createdAt': -1}")
+@CompoundIndex(name = "user_read_idx", def = "{'userId': 1, 'read': 1}")
 data class Notification(
     @Id val id: String? = null,
     val userId: String,
