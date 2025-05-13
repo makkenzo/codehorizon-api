@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.models.CourseProgress
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.mongodb.repository.MongoRepository
+import java.time.Instant
 
 interface CourseProgressRepository : MongoRepository<CourseProgress, String> {
     fun findByUserIdAndCourseId(userId: String, courseId: String): CourseProgress?
@@ -11,4 +12,7 @@ interface CourseProgressRepository : MongoRepository<CourseProgress, String> {
     fun countByUserIdAndProgressGreaterThanEqual(userId: String, progress: Double): Int
     fun countByProgressGreaterThanEqual(progress: Double): Long
     fun existsByUserIdAndCourseId(userId: String, courseId: String): Boolean
+    fun countByCourseId(courseId: String): Long
+    fun findByCourseId(courseId: String): List<CourseProgress>
+    fun countByCourseIdAndLastUpdatedAfter(courseId: String, date: Instant): Long
 }

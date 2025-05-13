@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CertificateRepository
@@ -21,19 +22,6 @@ class AuthorizationService(
     private val reviewRepository: ReviewRepository,
     private val certificateRepository: CertificateRepository
 ) {
-    private fun getCurrentUser(): User {
-        val authentication: Authentication = SecurityContextHolder.getContext().authentication
-            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не аутентифицирован")
-        val principal = authentication.principal
-        val username = if (principal is UserDetails) {
-            principal.username
-        } else {
-            principal.toString()
-        }
-        return userRepository.findByEmail(username)
-            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не найден в базе")
-    }
-
     fun getCurrentAuthentication(): Authentication =
         SecurityContextHolder.getContext().authentication
             ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не аутентифицирован")
@@ -63,8 +51,6 @@ class AuthorizationService(
         }
         return false
     }
-
-    fun canCreateCourse(): Boolean = hasAuthority("course:create")
 
     fun canEditCourse(courseId: String): Boolean {
         val course = courseRepository.findById(courseId).orElse(null)
@@ -185,5 +171,12 @@ class AuthorizationService(
         if (!hasAuthority("certificate:download:self")) return false
         val certificate = certificateRepository.findById(certificateId).orElse(null)
         return certificate?.userId == getCurrentUserEntity().id
+    }
+
+    fun isCourseAuthor(courseId: String): Boolean {
+        val currentUser = getCurrentUserEntity()
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс $courseId не найден для проверки авторства") }
+        return course.authorId == currentUser.id
     }
 }
