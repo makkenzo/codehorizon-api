@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.models.Review
 import com.makkenzo.codehorizon.repositories.*
 import org.bson.Document
@@ -27,7 +28,8 @@ class ReviewService(
     private val profileRepository: ProfileRepository,
     private val courseRepository: CourseRepository,
     private val mongoTemplate: MongoTemplate,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val notificationService: NotificationService
 ) {
     @Transactional
     @CacheEvict(value = ["courses"], key = "#slug")
@@ -55,6 +57,19 @@ class ReviewService(
         )
         val savedReview = reviewRepository.save(review)
         updateCourseAverageRating(courseId)
+
+        val course = courseRepository.findById(courseId).orElse(null)
+        if (course != null && course.authorId != authorId) {
+            val reviewAuthor = userRepository.findById(authorId).orElse(null)?.username ?: "Анонимный пользователь"
+            notificationService.createNotification(
+                userId = course.authorId,
+                type = NotificationType.NEW_REVIEW_ON_COURSE,
+                message = "$reviewAuthor оставил новый отзыв на ваш курс \"${course.title}\".",
+                link = "/courses/${course.slug}#reviews",
+                relatedEntityId = savedReview.id
+            )
+        }
+
         return mapReviewToDTO(savedReview)
     }
 

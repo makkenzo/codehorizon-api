@@ -1,5 +1,6 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.models.NotificationType
 import com.stripe.Stripe
 import com.stripe.model.Event
 import com.stripe.model.checkout.Session
@@ -9,7 +10,9 @@ import org.springframework.stereotype.Service
 @Service
 class StripeService(
     private val purchaseService: PurchaseService,
-    private val courseProgressService: CourseProgressService
+    private val courseProgressService: CourseProgressService,
+    private val courseService: CourseService,
+    private val notificationService: NotificationService
 ) {
     private val stripeSecretKey = System.getenv("STRIPE_SECRET_KEY")
         ?: throw RuntimeException("Missing STRIPE_SECRET_KEY")
@@ -47,6 +50,16 @@ class StripeService(
                             stripeSessionId = session.id,
                             amount = amountTotal,
                             currency = currency.lowercase()
+                        )
+
+                        val course = courseService.getCourseById(courseId)
+                        val courseTitle = course?.title ?: "купленный курс"
+
+                        notificationService.createNotification(
+                            userId = userId,
+                            type = NotificationType.COURSE_PURCHASED,
+                            message = "Вы успешно приобрели курс \"$courseTitle\"!",
+                            link = "/courses/${course.slug}/learn"
                         )
 
                         try {

@@ -3,9 +3,11 @@ package com.makkenzo.codehorizon.listeners
 import com.makkenzo.codehorizon.events.MentorshipApplicationApprovedEvent
 import com.makkenzo.codehorizon.events.MentorshipApplicationRejectedEvent
 import com.makkenzo.codehorizon.events.NewMentorshipApplicationEvent
+import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.UserRepository
 import com.makkenzo.codehorizon.services.EmailService
+import com.makkenzo.codehorizon.services.NotificationService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.event.EventListener
@@ -16,7 +18,8 @@ import org.springframework.stereotype.Component
 class NotificationEventListener(
     private val userRepository: UserRepository,
     @Value("\${FRONT_DOMAIN_URL}") private val frontDomainUrl: String,
-    private val emailService: EmailService
+    private val emailService: EmailService,
+    private val notificationService: NotificationService
 ) {
     private val logger = LoggerFactory.getLogger(NotificationEventListener::class.java)
 
@@ -63,6 +66,15 @@ class NotificationEventListener(
                         e
                     )
                 }
+            }
+            adminUsers.forEach { admin ->
+                notificationService.createNotification(
+                    userId = admin.id!!,
+                    type = NotificationType.MENTORSHIP_APPLICATION_NEW,
+                    message = "Новая заявка на менторство от ${event.applicantUsername}.",
+                    link = "/admin/mentorship-applications",
+                    relatedEntityId = event.applicationId
+                )
             }
             logger.info(
                 "Уведомления о новой заявке {} отправлены администраторам: {}",

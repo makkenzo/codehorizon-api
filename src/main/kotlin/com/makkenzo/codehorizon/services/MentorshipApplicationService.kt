@@ -9,6 +9,7 @@ import com.makkenzo.codehorizon.events.NewMentorshipApplicationEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.ApplicationStatus
 import com.makkenzo.codehorizon.models.MentorshipApplication
+import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.repositories.MentorshipApplicationRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
@@ -24,7 +25,8 @@ class MentorshipApplicationService(
     private val applicationRepository: MentorshipApplicationRepository,
     private val userRepository: UserRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val notificationService: NotificationService
 ) {
     private val logger = LoggerFactory.getLogger(MentorshipApplicationService::class.java)
 
@@ -53,6 +55,7 @@ class MentorshipApplicationService(
                 savedApplication.userEmail
             )
         )
+
 
         return mapToDTO(savedApplication)
     }
@@ -130,6 +133,12 @@ class MentorshipApplicationService(
                 savedApplication.userEmail
             )
         )
+        notificationService.createNotification(
+            userId = savedApplication.userId,
+            type = NotificationType.MENTORSHIP_APPLICATION_APPROVED,
+            message = "Ваша заявка на менторство одобрена!",
+            link = "/me/profile"
+        )
 
         return mapToDTO(savedApplication)
     }
@@ -140,7 +149,7 @@ class MentorshipApplicationService(
         rejectionReason: String?
     ): MentorshipApplicationDTO {
         val adminUserId = authorizationService.getCurrentUserEntity().id!!
-        
+
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Заявка с ID $applicationId не найдена") }
 
@@ -171,6 +180,12 @@ class MentorshipApplicationService(
                 savedApplication.userEmail,
                 savedApplication.rejectionReason
             )
+        )
+        notificationService.createNotification(
+            userId = savedApplication.userId,
+            type = NotificationType.MENTORSHIP_APPLICATION_REJECTED,
+            message = "Ваша заявка на менторство отклонена. ${rejectionReason?.let { "Причина: $it" } ?: ""}",
+            link = "/me/profile"
         )
 
         return mapToDTO(savedApplication)

@@ -6,5 +6,4 @@ import org.springframework.data.mongodb.repository.MongoRepository
 interface CertificateRepository : MongoRepository<Certificate, String> {
     fun findByUserId(userId: String): List<Certificate>
     fun existsByUserIdAndCourseId(userId: String, courseId: String): Boolean
-    fun findByUniqueCertificateId(uniqueCertificateId: String): Certificate?
 }

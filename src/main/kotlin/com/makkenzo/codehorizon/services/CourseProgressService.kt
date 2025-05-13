@@ -4,6 +4,7 @@ import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.CourseProgress
+import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -20,7 +21,8 @@ class CourseProgressService(
     private val courseService: CourseService,
     private val courseRepository: CourseRepository,
     private val certificateService: CertificateService,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val notificationService: NotificationService
 ) {
     private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
 
@@ -92,6 +94,27 @@ class CourseProgressService(
         val savedProgress = courseProgressRepository.save(updatedProgress)
 
         if (savedProgress.progress >= 100.0) {
+            val course = courseRepository.findById(courseId).orElse(null)
+            val courseTitle = course?.title ?: "курс"
+            val courseSlug = course?.slug ?: courseId
+
+
+            notificationService.createNotification(
+                userId = currentUserId,
+                type = NotificationType.COURSE_COMPLETED,
+                message = "Поздравляем! Вы успешно завершили курс \"$courseTitle\"!",
+                link = "/courses/$courseSlug"
+            )
+
+            if (course != null && course.authorId != currentUserId) {
+                notificationService.createNotification(
+                    userId = course.authorId,
+                    type = NotificationType.LESSON_COMPLETED_BY_STUDENT,
+                    message = "Пользователь ${authorizationService.getCurrentUserEntity().username} завершил ваш курс \"${course.title}\".",
+                    link = "/admin/courses/${course.id}/students"
+                )
+            }
+
             logger.info(
                 "Прогресс курса {} для пользователя {} достиг 100%. Попытка создания сертификата.",
                 courseId,
