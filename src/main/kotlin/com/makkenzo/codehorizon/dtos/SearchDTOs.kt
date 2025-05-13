@@ -13,7 +13,8 @@ data class AuthorSearchResultDTO(
     val username: String,
     val displayName: String?,
     val avatarUrl: String?,
-    val avatarColor: String?
+    val avatarColor: String?,
+    val bio: String?
 )
 
 data class SearchResultItemDTO(

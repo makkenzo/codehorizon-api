@@ -1,8 +1,12 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.UpdatePrivacySettingsRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
+import com.makkenzo.codehorizon.models.AccountSettings
+import com.makkenzo.codehorizon.models.PrivacySettings
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.repositories.ProfileRepository
+import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
@@ -20,9 +24,47 @@ import javax.imageio.ImageIO
 class ProfileService(
     private val profileRepository: ProfileRepository,
     private val cloudflareService: CloudflareService,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val userRepository: UserRepository
 ) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
+
+    @Transactional
+    @CacheEvict(
+        value = ["profiles", "userProfiles", "userAccountSettings"],
+        key = "@authorizationService.getCurrentUserEntity().id"
+    )
+    fun updatePrivacySettings(dto: UpdatePrivacySettingsRequestDTO): PrivacySettings {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val currentAccountSettings = currentUser.accountSettings ?: AccountSettings()
+
+        var currentPrivacySettings = currentAccountSettings.privacySettings
+
+        dto.profileVisibility?.let { currentPrivacySettings = currentPrivacySettings.copy(profileVisibility = it) }
+        dto.showEmailOnProfile?.let { currentPrivacySettings = currentPrivacySettings.copy(showEmailOnProfile = it) }
+        dto.showCoursesInProgressOnProfile?.let {
+            currentPrivacySettings = currentPrivacySettings.copy(showCoursesInProgressOnProfile = it)
+        }
+        dto.showCompletedCoursesOnProfile?.let {
+            currentPrivacySettings = currentPrivacySettings.copy(showCompletedCoursesOnProfile = it)
+        }
+        dto.showActivityFeedOnProfile?.let {
+            currentPrivacySettings = currentPrivacySettings.copy(showActivityFeedOnProfile = it)
+        }
+        dto.allowDirectMessages?.let { currentPrivacySettings = currentPrivacySettings.copy(allowDirectMessages = it) }
+
+        val updatedAccountSettings = currentAccountSettings.copy(privacySettings = currentPrivacySettings)
+        val updatedUser = currentUser.copy(accountSettings = updatedAccountSettings)
+        userRepository.save(updatedUser)
+
+        return currentPrivacySettings
+    }
+
+    @Cacheable(value = ["userAccountSettings"], key = "@authorizationService.getCurrentUserEntity().id")
+    fun getCurrentUserAccountSettings(): AccountSettings {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        return currentUser.accountSettings ?: AccountSettings()
+    }
 
     fun createProfile(profile: Profile): Profile {
         if (profileRepository.findByUserId(profile.userId) != null) {

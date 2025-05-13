@@ -1,7 +1,10 @@
 package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.AccountSettings
 import com.makkenzo.codehorizon.models.Profile
+import com.makkenzo.codehorizon.models.ProfileVisibility
 import com.makkenzo.codehorizon.models.User
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
@@ -228,37 +231,99 @@ class UserService(
 
     @Cacheable(value = ["userProfiles"], key = "#username")
     fun getProfileByUsername(username: String): UserProfileDTO {
-        val user = userRepository.findByUsername(username) ?: throw ResponseStatusException(
-            HttpStatus.NOT_FOUND, "Профиль с таким юзернеймом не найден"
-        )
+        val requestedUser: User = userRepository.findByUsername(username)
+            ?: throw NotFoundException("Пользователь '$username' не найден")
+        val requestedUserProfile: com.makkenzo.codehorizon.models.Profile =
+            profileRepository.findByUserId(requestedUser.id!!)
+                ?: throw NotFoundException("Профиль для пользователя '$username' не найден")
 
-        val profile = profileRepository.findByUserId(user.id!!)
-            ?: throw ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Профиль пользователя не найден"
-            )
+        val requestedUserSettings: AccountSettings = requestedUser.accountSettings ?: AccountSettings()
+        val privacySettings = requestedUserSettings.privacySettings
 
-        val progressPageable = PageRequest.of(0, 3, Sort.by(Sort.Direction.DESC, "lastUpdated"))
-        val progressList = courseProgressRepository.findByUserId(user.id, progressPageable).content
-        val courseIdsInProgress = progressList.map { it.courseId }
-        val coursesInProgressMap = courseRepository.findAllById(courseIdsInProgress).associateBy { it.id }
+        val currentAuthUser: User? = try {
+            authorizationService.getCurrentUserEntity()
+        } catch (e: ResponseStatusException) {
+            null
+        }
 
-        val coursesInProgressDTO = progressList.mapNotNull { progress ->
-            coursesInProgressMap[progress.courseId]?.let { course ->
-                PublicCourseInfoDTO(
-                    id = course.id!!,
-                    title = course.title,
-                    slug = course.slug,
-                    imagePreview = course.imagePreview,
-                    progress = progress.progress
-                )
+        val isOwner = currentAuthUser?.id == requestedUser.id
+        val isAdmin = currentAuthUser?.let { authorizationService.isCurrentUserAdmin() } ?: false
+        val isRegisteredViewer = currentAuthUser != null
+
+        when (privacySettings.profileVisibility) {
+            ProfileVisibility.PRIVATE -> {
+                if (!isOwner && !isAdmin) {
+                    throw org.springframework.security.access.AccessDeniedException("Этот профиль является приватным.")
+                }
+            }
+
+            ProfileVisibility.REGISTERED_USERS -> {
+                if (!isRegisteredViewer) {
+                    throw org.springframework.security.access.AccessDeniedException("Этот профиль доступен только зарегистрированным пользователям.")
+                }
+            }
+
+            ProfileVisibility.PUBLIC -> {
             }
         }
 
-        val completedCount = courseProgressRepository.countByUserIdAndProgressGreaterThanEqual(user.id, 100.0)
+        val finalProfileDto = ProfileDTO(
+            firstName = requestedUserProfile.firstName,
+            lastName = requestedUserProfile.lastName,
+            avatarUrl = requestedUserProfile.avatarUrl,
+            avatarColor = requestedUserProfile.avatarColor,
+            bio = requestedUserProfile.bio,
+            location = requestedUserProfile.location,
+            website = if (isOwner || isAdmin || privacySettings.profileVisibility == ProfileVisibility.PUBLIC || (privacySettings.profileVisibility == ProfileVisibility.REGISTERED_USERS)) {
+                requestedUserProfile.website
+            } else null
+        )
 
-        val createdCoursesDTO = if (user.createdCourseIds.isNotEmpty()) {
-            val createdCourses = courseRepository.findAllById(user.createdCourseIds)
+        val showCoursesInProgress = when {
+            isOwner || isAdmin -> true
+            privacySettings.profileVisibility == ProfileVisibility.PRIVATE -> false
+            !privacySettings.showCoursesInProgressOnProfile -> false
+            privacySettings.profileVisibility == ProfileVisibility.REGISTERED_USERS -> isRegisteredViewer
+            else -> true
+        }
+        val coursesInProgressDTO: List<PublicCourseInfoDTO>? = if (showCoursesInProgress) {
+            val progressPageable =
+                PageRequest.of(0, 6, Sort.by(Sort.Direction.DESC, "lastUpdated"))
+            val progressList = courseProgressRepository.findByUserId(requestedUser.id!!, progressPageable).content
+            val courseIdsInProgress = progressList.map { it.courseId }
+            if (courseIdsInProgress.isNotEmpty()) {
+                val coursesInProgressMap =
+                    courseRepository.findAllById(courseIdsInProgress).filter { it.deletedAt == null }
+                        .associateBy { it.id }
+                progressList.mapNotNull { progress ->
+                    coursesInProgressMap[progress.courseId]?.let { course ->
+                        PublicCourseInfoDTO(
+                            id = course.id!!,
+                            title = course.title,
+                            slug = course.slug,
+                            imagePreview = course.imagePreview,
+                            progress = progress.progress
+                        )
+                    }
+                }
+            } else emptyList()
+        } else null
+
+        val showCompletedCourses = when {
+            isOwner || isAdmin -> true
+            privacySettings.profileVisibility == ProfileVisibility.PRIVATE -> false
+            !privacySettings.showCompletedCoursesOnProfile -> false
+            privacySettings.profileVisibility == ProfileVisibility.REGISTERED_USERS -> isRegisteredViewer
+            else -> true
+        }
+        val completedCoursesCount = if (showCompletedCourses) {
+            courseProgressRepository.countByUserIdAndProgressGreaterThanEqual(requestedUser.id!!, 100.0)
+        } else 0
+
+        val createdCoursesDTO: List<PublicCourseInfoDTO>? = if (requestedUser.createdCourseIds.isNotEmpty()) {
+            val createdCourses = courseRepository.findAllById(requestedUser.createdCourseIds)
+                .filter { it.deletedAt == null }
+                .take(6)
             createdCourses.map { course ->
                 PublicCourseInfoDTO(
                     id = course.id!!,
@@ -268,26 +333,15 @@ class UserService(
                     progress = null
                 )
             }
-        } else {
-            null
-        }
+        } else null
 
         return UserProfileDTO(
-            id = user.id,
-            username = user.username,
-            profile = ProfileDTO(
-                firstName = profile.firstName,
-                lastName = profile.lastName,
-                avatarUrl = profile.avatarUrl,
-                avatarColor = profile.avatarColor,
-                bio = profile.bio,
-                location = profile.location,
-                website = profile.website
-            ),
-
-            coursesInProgress = coursesInProgressDTO.ifEmpty { null },
-            completedCoursesCount = completedCount,
-            createdCourses = createdCoursesDTO
+            id = requestedUser.id!!,
+            username = requestedUser.username,
+            profile = finalProfileDto,
+            coursesInProgress = coursesInProgressDTO?.ifEmpty { null },
+            completedCoursesCount = completedCoursesCount,
+            createdCourses = createdCoursesDTO?.ifEmpty { null },
         )
     }
 
