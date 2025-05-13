@@ -1,8 +1,10 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.UpdateNotificationPreferencesRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdatePrivacySettingsRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
 import com.makkenzo.codehorizon.models.AccountSettings
+import com.makkenzo.codehorizon.models.NotificationPreferences
 import com.makkenzo.codehorizon.models.PrivacySettings
 import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.repositories.ProfileRepository
@@ -28,6 +30,38 @@ class ProfileService(
     private val userRepository: UserRepository
 ) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
+
+
+    @Transactional
+    @CacheEvict(
+        value = ["userAccountSettings", "profiles", "userProfiles"],
+        key = "@authorizationService.getCurrentUserEntity().id"
+    )
+    fun updateNotificationPreferences(dto: UpdateNotificationPreferencesRequestDTO): NotificationPreferences {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val currentAccountSettings = currentUser.accountSettings ?: AccountSettings()
+        var currentPrefs = currentAccountSettings.notificationPreferences
+
+        dto.emailGlobalOnOff?.let { currentPrefs = currentPrefs.copy(emailGlobalOnOff = it) }
+        dto.emailMentorshipStatusChange?.let { currentPrefs = currentPrefs.copy(emailMentorshipStatusChange = it) }
+        dto.emailCoursePurchaseConfirmation?.let {
+            currentPrefs = currentPrefs.copy(emailCoursePurchaseConfirmation = it)
+        }
+        dto.emailCourseCompletion?.let { currentPrefs = currentPrefs.copy(emailCourseCompletion = it) }
+        dto.emailNewReviewOnMyCourse?.let { currentPrefs = currentPrefs.copy(emailNewReviewOnMyCourse = it) }
+        dto.emailStudentCompletedMyCourse?.let { currentPrefs = currentPrefs.copy(emailStudentCompletedMyCourse = it) }
+        dto.emailMarketingNewCourses?.let { currentPrefs = currentPrefs.copy(emailMarketingNewCourses = it) }
+        dto.emailMarketingUpdates?.let { currentPrefs = currentPrefs.copy(emailMarketingUpdates = it) }
+        dto.emailProgressReminders?.let { currentPrefs = currentPrefs.copy(emailProgressReminders = it) }
+        dto.emailSecurityAlerts?.let { currentPrefs = currentPrefs.copy(emailSecurityAlerts = it) }
+
+        val updatedAccountSettings = currentAccountSettings.copy(notificationPreferences = currentPrefs)
+        val updatedUser = currentUser.copy(accountSettings = updatedAccountSettings)
+        userRepository.save(updatedUser)
+
+        logger.info("Настройки уведомлений для пользователя ${currentUser.username} обновлены.")
+        return currentPrefs
+    }
 
     @Transactional
     @CacheEvict(
