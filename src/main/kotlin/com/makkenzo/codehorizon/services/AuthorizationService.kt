@@ -3,11 +3,9 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.Course
 import com.makkenzo.codehorizon.models.User
-import com.makkenzo.codehorizon.repositories.CertificateRepository
-import com.makkenzo.codehorizon.repositories.CourseRepository
-import com.makkenzo.codehorizon.repositories.ReviewRepository
-import com.makkenzo.codehorizon.repositories.UserRepository
+import com.makkenzo.codehorizon.repositories.*
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
@@ -20,7 +18,8 @@ class AuthorizationService(
     private val userRepository: UserRepository,
     private val courseRepository: CourseRepository,
     private val reviewRepository: ReviewRepository,
-    private val certificateRepository: CertificateRepository
+    private val certificateRepository: CertificateRepository,
+    private val courseProgressRepository: CourseProgressRepository
 ) {
     fun getCurrentAuthentication(): Authentication =
         SecurityContextHolder.getContext().authentication
@@ -178,5 +177,13 @@ class AuthorizationService(
         val course = courseRepository.findById(courseId)
             .orElseThrow { NotFoundException("Курс $courseId не найден для проверки авторства") }
         return course.authorId == currentUser.id
+    }
+
+    fun canReadEnrolledCourseContent(courseId: String) {
+        val course = courseRepository.findById(courseId)
+            .orElseThrow { NotFoundException("Курс $courseId не найден для проверки доступа") }
+        if (!courseProgressRepository.existsByUserIdAndCourseId(getCurrentUserEntity().id!!, courseId)) {
+            throw AccessDeniedException("У вас нет доступа к этому курсу (вы не записаны).")
+        }
     }
 }
