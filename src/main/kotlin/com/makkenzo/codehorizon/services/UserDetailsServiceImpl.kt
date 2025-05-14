@@ -92,7 +92,8 @@ class UserDetailsServiceImpl(private val userRepository: UserRepository) : UserD
             "course:read:list:all",
             "course:read:details:any",
             "file:upload:other",
-            "achievement:admin:manage"
+            "achievement:admin:manage",
+            "admin:job:run"
         )
 
         if (roles.any { it.equals("ROLE_USER", ignoreCase = true) || it.equals("USER", ignoreCase = true) }) {
