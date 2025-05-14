@@ -50,7 +50,7 @@ class SecurityConfig(
                         "/api/payments/stripe/webhook",
                         "/api/search",
                         "/api/users/{username}/certificates/public",
-                        "/api/users/{username/achievements/",
+                        "/api/users/{username}/achievements/",
                         "/swagger-ui/**", "/v3/api-docs/**",
                         "/actuator/prometheus"
                     ).permitAll()
