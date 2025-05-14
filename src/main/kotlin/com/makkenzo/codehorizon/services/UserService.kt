@@ -2,10 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.AccountSettings
-import com.makkenzo.codehorizon.models.Profile
-import com.makkenzo.codehorizon.models.ProfileVisibility
-import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
@@ -36,6 +33,7 @@ class UserService(
     private val courseProgressRepository: CourseProgressRepository,
     private val mongoTemplate: MongoTemplate,
     private val authorizationService: AuthorizationService,
+    private val achievementService: AchievementService,
 ) {
     companion object {
         const val XP_FOR_LESSON_COMPLETION: Long = 10
@@ -95,8 +93,22 @@ class UserService(
                 userAfterXpGain.dailyStreak += 1
 
                 when (userAfterXpGain.dailyStreak) {
-                    3 -> gainXp(userId, STREAK_BONUS_3_DAYS_XP, "3-day streak bonus")
-                    7 -> gainXp(userId, STREAK_BONUS_7_DAYS_XP, "7-day streak bonus")
+                    3 -> {
+                        gainXp(userId, STREAK_BONUS_3_DAYS_XP, "3-day streak bonus")
+                        achievementService.checkAndGrantAchievements(
+                            userId,
+                            AchievementTriggerType.DAILY_LOGIN_STREAK
+                        )
+                    }
+
+                    7 -> {
+                        gainXp(userId, STREAK_BONUS_7_DAYS_XP, "7-day streak bonus")
+                        achievementService.checkAndGrantAchievements(userId, AchievementTriggerType.DAILY_LOGIN_STREAK)
+                    }
+
+                    else -> {
+                        achievementService.checkAndGrantAchievements(userId, AchievementTriggerType.DAILY_LOGIN_STREAK)
+                    }
                 }
             } else if (userAfterXpGain.lastActivityDate == null || !isYesterday(
                     userAfterXpGain.lastActivityDate!!,

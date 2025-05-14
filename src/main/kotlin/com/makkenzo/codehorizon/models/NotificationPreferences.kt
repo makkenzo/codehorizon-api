@@ -13,4 +13,5 @@ data class NotificationPreferences(
     val emailMarketingUpdates: Boolean = true,
     val emailProgressReminders: Boolean = false,
     val emailSecurityAlerts: Boolean = true,
+    val emailAchievementUnlocked: Boolean = true
 ) : Serializable

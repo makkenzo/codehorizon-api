@@ -2,10 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.Course
-import com.makkenzo.codehorizon.models.CourseDifficultyLevels
-import com.makkenzo.codehorizon.models.CourseProgress
-import com.makkenzo.codehorizon.models.Lesson
+import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -42,7 +39,8 @@ class CourseService(
     private val courseProgressRepository: CourseProgressRepository,
     private val mediaProcessingService: MediaProcessingService,
     private val cloudflareService: CloudflareService,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val achievementService: AchievementService
 ) {
     fun findAllCoursesAdmin(
         pageable: Pageable,
@@ -204,6 +202,13 @@ class CourseService(
         if (!author.createdCourseIds.contains(savedCourse.id!!)) {
             author.createdCourseIds.add(savedCourse.id)
             userRepository.save(author)
+
+            val courseCount = author.createdCourseIds.size
+            achievementService.checkAndGrantAchievements(
+                author.id!!,
+                AchievementTriggerType.COURSE_CREATION_COUNT,
+                courseCount
+            )
         }
 
         mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)

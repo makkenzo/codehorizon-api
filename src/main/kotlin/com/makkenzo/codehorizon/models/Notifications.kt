@@ -14,6 +14,7 @@ enum class NotificationType {
     COURSE_COMPLETED,
     NEW_REVIEW_ON_COURSE,
     LESSON_COMPLETED_BY_STUDENT,
+    ACHIEVEMENT_UNLOCKED
 }
 
 @Document(collection = "notifications")

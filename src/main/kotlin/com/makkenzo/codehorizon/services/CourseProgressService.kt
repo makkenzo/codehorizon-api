@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.AchievementTriggerType
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
@@ -23,7 +24,9 @@ class CourseProgressService(
     private val certificateService: CertificateService,
     private val authorizationService: AuthorizationService,
     private val notificationService: NotificationService,
-    private val userService: UserService
+    private val userService: UserService,
+    private val achievementService: AchievementService,
+    private val userActivityService: UserActivityService
 ) {
     private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
 
@@ -98,11 +101,20 @@ class CourseProgressService(
         val courseEntity = courseRepository.findById(courseId).orElse(null)
         val lessonEntity = courseEntity?.lessons?.find { it.id == lessonId }
 
-        if (student != null && lessonEntity != null && courseEntity != null) {
+        if (student != null && lessonEntity != null) {
             userService.gainXp(
                 currentUserId,
                 UserService.XP_FOR_LESSON_COMPLETION,
                 "lesson completion: ${lessonEntity.title}"
+            )
+        }
+
+        if (added) {
+            val dailyStats = userActivityService.incrementLessonsCompletedToday(currentUserId)
+            achievementService.checkAndGrantAchievements(
+                currentUserId,
+                AchievementTriggerType.LESSON_COMPLETION_STREAK,
+                dailyStats.lessonsCompletedCount
             )
         }
 
@@ -150,6 +162,22 @@ class CourseProgressService(
                     currentUserId,
                     UserService.XP_FOR_COURSE_COMPLETION,
                     "course completion: ${courseEntity.title}"
+                )
+            }
+
+            if (courseProgress.progress < 100.0) {
+                userService.gainXp(
+                    currentUserId,
+                    UserService.XP_FOR_COURSE_COMPLETION,
+                    "course completion: ${courseEntity.title}"
+                )
+                achievementService.checkAndGrantAchievements(
+                    currentUserId,
+                    AchievementTriggerType.COURSE_COMPLETION_COUNT
+                )
+                achievementService.checkAndGrantAchievements(
+                    currentUserId,
+                    AchievementTriggerType.FIRST_COURSE_COMPLETED
                 )
             }
         }

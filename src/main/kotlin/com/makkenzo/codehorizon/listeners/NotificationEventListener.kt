@@ -245,4 +245,52 @@ class NotificationEventListener(
             templateContext = context
         )
     }
+
+    @Async
+    @EventListener
+    fun handleAchievementUnlocked(event: AchievementUnlockedEvent) {
+        logger.info(
+            "Обработка события AchievementUnlockedEvent для пользователя ID: {}, достижение: {}",
+            event.userId,
+            event.achievement.name
+        )
+        try {
+            val user = userRepository.findById(event.userId).orElse(null)
+            if (user == null) {
+                logger.warn("Пользователь с ID {} не найден для отправки уведомления о достижении.", event.userId)
+                return
+            }
+
+            notificationService.createNotification(
+                userId = event.userId,
+                type = NotificationType.ACHIEVEMENT_UNLOCKED,
+                message = "Поздравляем! Вы получили достижение: \"${event.achievement.name}\"!",
+                link = "/me/profile?tab=achievements",
+                relatedEntityId = event.achievement.id
+            )
+            logger.info("Внутрисистемное уведомление о достижении '${event.achievement.name}' создано для пользователя ${user.username}")
+
+            val context = Context().apply {
+                setVariable("username", user.username)
+                setVariable("achievementName", event.achievement.name)
+                setVariable("achievementDescription", event.achievement.description)
+                setVariable("achievementsLink", "$frontDomainUrl/me/profile?tab=achievements")
+            }
+
+            emailService.sendConfigurableEmail(
+                toUser = user,
+                emailTypeCheck = { prefs -> prefs.emailAchievementUnlocked },
+                subject = "Новое достижение: ${event.achievement.name}!",
+                htmlTemplateName = "achievement-unlocked-email",
+                templateContext = context
+            )
+            logger.info("Email уведомление о достижении '${event.achievement.name}' запланировано к отправке пользователю ${user.username}")
+
+        } catch (e: Exception) {
+            logger.error(
+                "Ошибка при обработке AchievementUnlockedEvent для пользователя ${event.userId}, достижение ${event.achievement.name}: ${e.message}",
+                e
+            )
+        }
+    }
 }

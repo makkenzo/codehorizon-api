@@ -3,10 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.UpdateNotificationPreferencesRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdatePrivacySettingsRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
-import com.makkenzo.codehorizon.models.AccountSettings
-import com.makkenzo.codehorizon.models.NotificationPreferences
-import com.makkenzo.codehorizon.models.PrivacySettings
-import com.makkenzo.codehorizon.models.Profile
+import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
@@ -27,7 +24,8 @@ class ProfileService(
     private val profileRepository: ProfileRepository,
     private val cloudflareService: CloudflareService,
     private val authorizationService: AuthorizationService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val achievementService: AchievementService
 ) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
 
@@ -160,6 +158,13 @@ class ProfileService(
             updateAvatarColorAsync(savedProfile.id!!, newAvatarUrl)
         }
 
+        val completionPercentage = calculateProfileCompletionPercentage(savedProfile)
+        achievementService.checkAndGrantAchievements(
+            savedProfile.userId,
+            AchievementTriggerType.PROFILE_COMPLETION_PERCENT,
+            completionPercentage
+        )
+
         return savedProfile
     }
 
@@ -247,5 +252,19 @@ class ProfileService(
         profile.avatarUrl?.let { cloudflareService.deleteFileFromR2Async(it) }
         profile.signatureUrl?.let { cloudflareService.deleteFileFromR2Async(it) }
         profileRepository.delete(profile)
+    }
+
+    private fun calculateProfileCompletionPercentage(profile: Profile): Int {
+        val fieldsToConsider = listOf(
+            profile.avatarUrl,
+            profile.bio,
+            profile.firstName,
+            profile.lastName,
+            profile.location,
+            profile.website
+        )
+        val filledCount = fieldsToConsider.count { !it.isNullOrBlank() }
+        if (fieldsToConsider.isEmpty()) return 0
+        return ((filledCount.toDouble() / fieldsToConsider.size.toDouble()) * 100).toInt()
     }
 }

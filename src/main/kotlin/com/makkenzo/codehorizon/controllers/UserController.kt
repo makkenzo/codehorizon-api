@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.Achievement
 import com.makkenzo.codehorizon.services.*
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
@@ -22,8 +23,31 @@ class UserController(
     private val courseProgressService: CourseProgressService,
     private val courseService: CourseService,
     private val authorizationService: AuthorizationService,
-    private val certificateService: CertificateService
+    private val certificateService: CertificateService,
+    private val achievementService: AchievementService
 ) {
+
+    @GetMapping("/me/achievements")
+    @Operation(summary = "Получить список достижений текущего пользователя")
+    @PreAuthorize("isAuthenticated()")
+    fun getMyAchievements(): ResponseEntity<List<Achievement>> {
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val achievements = achievementService.getUserAchievementsWithDetails(currentUser.id!!)
+        return ResponseEntity.ok(achievements)
+    }
+
+    @GetMapping("/{username}/achievements/public")
+    @Operation(summary = "Получить публичный список достижений пользователя")
+    fun getPublicUserAchievements(@PathVariable username: String): ResponseEntity<List<Achievement>> {
+        val user = userService.findByLogin(username)
+            ?: return ResponseEntity.notFound().build()
+
+        // TODO: Добавить проверку приватности для достижений, если она нужна
+
+        val achievements = achievementService.getUserAchievementsWithDetails(user.id!!)
+        return ResponseEntity.ok(achievements)
+    }
+
     @GetMapping("/{username}/certificates/public")
     @Operation(summary = "Получение публичных сертификатов пользователя по username")
     fun getPublicCertificatesByUsername(@PathVariable username: String): ResponseEntity<List<PublicCertificateInfoDTO>> {

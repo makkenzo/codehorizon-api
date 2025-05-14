@@ -12,4 +12,5 @@ interface ReviewRepository : MongoRepository<Review, String> {
     fun findAllByCourseId(courseId: String): List<Review>
     fun existsByAuthorIdAndCourseId(authorId: String, courseId: String): Boolean
     fun countByCourseId(courseId: String): Long
+    fun countByAuthorId(authorId: String): Long
 }

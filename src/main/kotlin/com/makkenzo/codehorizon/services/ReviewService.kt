@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
+import com.makkenzo.codehorizon.models.AchievementTriggerType
 import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.models.Review
 import com.makkenzo.codehorizon.repositories.*
@@ -30,7 +31,8 @@ class ReviewService(
     private val mongoTemplate: MongoTemplate,
     private val authorizationService: AuthorizationService,
     private val notificationService: NotificationService,
-    private val userService: UserService
+    private val userService: UserService,
+    private val achievementService: AchievementService
 ) {
     @Transactional
     @CacheEvict(value = ["courses"], key = "#slug")
@@ -60,6 +62,8 @@ class ReviewService(
         updateCourseAverageRating(courseId)
 
         userService.gainXp(authorId, UserService.XP_FOR_REVIEW, "review for course ID: $courseId")
+        achievementService.checkAndGrantAchievements(authorId, AchievementTriggerType.REVIEW_COUNT)
+        achievementService.checkAndGrantAchievements(authorId, AchievementTriggerType.FIRST_REVIEW_WRITTEN)
 
         val course = courseRepository.findById(courseId).orElse(null)
         if (course != null && course.authorId != authorId) {
