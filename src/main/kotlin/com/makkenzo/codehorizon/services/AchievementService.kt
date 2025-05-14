@@ -206,7 +206,10 @@ class AchievementService(
 
     fun getUserAchievementsWithDetails(userId: String): List<Achievement> {
         val userAchievementKeys = userAchievementRepository.findByUserId(userId).map { it.achievementKey }
-        if (userAchievementKeys.isEmpty()) return emptyList()
-        return achievementRepository.findAllById(userAchievementKeys).sortedBy { it.order }
+        if (userAchievementKeys.isEmpty()) {
+            return emptyList()
+        }
+        val achievements = achievementRepository.findByKeyIn(userAchievementKeys).sortedBy { it.order }
+        return achievements
     }
 }
