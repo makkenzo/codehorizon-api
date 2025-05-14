@@ -1,14 +1,8 @@
 package com.makkenzo.codehorizon.controllers
 
-import com.makkenzo.codehorizon.dtos.PagedResponseDTO
-import com.makkenzo.codehorizon.dtos.PopularAuthorDTO
-import com.makkenzo.codehorizon.dtos.UserCourseDTO
-import com.makkenzo.codehorizon.dtos.UserProfileDTO
+import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.services.AuthorizationService
-import com.makkenzo.codehorizon.services.CourseProgressService
-import com.makkenzo.codehorizon.services.CourseService
-import com.makkenzo.codehorizon.services.UserService
+import com.makkenzo.codehorizon.services.*
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -27,8 +21,23 @@ class UserController(
     private val userService: UserService,
     private val courseProgressService: CourseProgressService,
     private val courseService: CourseService,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val certificateService: CertificateService
 ) {
+    @GetMapping("/{username}/certificates/public")
+    @Operation(summary = "Получение публичных сертификатов пользователя по username")
+    fun getPublicCertificatesByUsername(@PathVariable username: String): ResponseEntity<List<PublicCertificateInfoDTO>> {
+        return try {
+            val certificates = certificateService.getPublicCertificatesByUsername(username)
+            ResponseEntity.ok(certificates)
+        } catch (e: NotFoundException) {
+            ResponseEntity.notFound().build()
+        } catch (e: Exception) {
+            // Логирование ошибки
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
+        }
+    }
+
     @GetMapping("/{username}/profile")
     @Operation(summary = "Получение профиля по username")
     fun getProfileByUsername(@PathVariable username: String): ResponseEntity<UserProfileDTO> {

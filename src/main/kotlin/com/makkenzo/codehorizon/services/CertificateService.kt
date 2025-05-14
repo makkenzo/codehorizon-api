@@ -1,10 +1,9 @@
 package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.CertificateDTO
+import com.makkenzo.codehorizon.dtos.PublicCertificateInfoDTO
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.Certificate
-import com.makkenzo.codehorizon.models.Profile
-import com.makkenzo.codehorizon.models.User
+import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.CertificateRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
@@ -35,6 +34,26 @@ class CertificateService(
             .take(5)
             .uppercase()
         return "CERT-$randomNumberPart-$randomCharsPart"
+    }
+
+    fun getPublicCertificatesByUsername(username: String): List<PublicCertificateInfoDTO> {
+        val user = userRepository.findByUsername(username)
+            ?: throw NotFoundException("Пользователь '$username' не найден")
+
+        val profile = profileRepository.findByUserId(user.id!!)
+        val accountSettings = user.accountSettings ?: AccountSettings()
+
+        if (accountSettings.privacySettings.profileVisibility == ProfileVisibility.PRIVATE) {
+            return emptyList()
+        }
+
+        val certificates = certificateRepository.findByUserId(user.id!!)
+        return certificates.map { cert ->
+            PublicCertificateInfoDTO(
+                courseTitle = cert.courseTitle,
+                completionDate = dateFormatter.format(cert.completionDate)
+            )
+        }
     }
 
     @Transactional
