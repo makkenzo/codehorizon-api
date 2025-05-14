@@ -16,5 +16,6 @@ data class UserProfileDTO(
     val profile: ProfileDTO,
     val coursesInProgress: List<PublicCourseInfoDTO>? = null,
     val completedCoursesCount: Int = 0,
-    val createdCourses: List<PublicCourseInfoDTO>? = null
+    val createdCourses: List<PublicCourseInfoDTO>? = null,
+    val level: Int,
 ) : Serializable

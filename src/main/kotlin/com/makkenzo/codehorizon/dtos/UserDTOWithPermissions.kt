@@ -13,5 +13,9 @@ data class UserDTOWithPermissions(
     val wishlistId: String?,
     val accountSettings: AccountSettings?,
     val createdAt: Instant,
-    val permissions: List<String>
+    val xp: Long,
+    val level: Int,
+    val xpForNextLevel: Long,
+    val dailyStreak: Int,
+    val permissions: List<String>,
 )

@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
+import java.time.Instant
 import java.util.regex.Pattern
 
 @Service
@@ -36,6 +37,82 @@ class UserService(
     private val mongoTemplate: MongoTemplate,
     private val authorizationService: AuthorizationService,
 ) {
+    companion object {
+        const val XP_FOR_LESSON_COMPLETION: Long = 10
+        const val XP_FOR_COURSE_COMPLETION: Long = 100
+        const val XP_FOR_REVIEW: Long = 5
+        const val XP_FOR_DAILY_ACTIVITY: Long = 5
+        const val XP_BASE_FOR_NEXT_LEVEL: Long = 100
+        const val STREAK_BONUS_3_DAYS_XP: Long = 15
+        const val STREAK_BONUS_7_DAYS_XP: Long = 35
+    }
+
+    fun calculateXpForNextLevel(level: Int): Long {
+        if (level <= 0) return XP_BASE_FOR_NEXT_LEVEL
+        return XP_BASE_FOR_NEXT_LEVEL + ((level - 1) * 50L).coerceAtLeast(0L)
+    }
+
+    fun gainXp(userId: String, amount: Long, activityType: String): User? {
+        val user = userRepository.findById(userId).orElse(null)
+            ?: run {
+                return null
+            }
+
+        if (amount <= 0) {
+            return user
+        }
+
+        user.xp += amount
+
+        var levelIncreased = false
+        while (user.xp >= user.xpForNextLevel) {
+            user.xp -= user.xpForNextLevel
+            user.level += 1
+            user.xpForNextLevel = calculateXpForNextLevel(user.level)
+            levelIncreased = true
+            // TODO: Отправить событие/уведомление о повышении уровня (ApplicationEventPublisher)
+            // eventPublisher.publishEvent(UserLeveledUpEvent(this, user.id!!, user.level))
+        }
+
+        return userRepository.save(user)
+    }
+
+    fun updateUserDailyActivity(userId: String): User? {
+        val user = userRepository.findById(userId).orElse(null)
+            ?: run {
+                return null
+            }
+
+        val now = Instant.now()
+        var userModified = false
+
+        if (user.lastActivityDate == null || !isSameDay(user.lastActivityDate!!, now)) {
+            gainXp(userId, XP_FOR_DAILY_ACTIVITY, "daily login/activity bonus")
+
+            val userAfterXpGain = userRepository.findById(userId).orElse(user)
+
+            if (userAfterXpGain.lastActivityDate != null && isYesterday(userAfterXpGain.lastActivityDate!!, now)) {
+                userAfterXpGain.dailyStreak += 1
+
+                when (userAfterXpGain.dailyStreak) {
+                    3 -> gainXp(userId, STREAK_BONUS_3_DAYS_XP, "3-day streak bonus")
+                    7 -> gainXp(userId, STREAK_BONUS_7_DAYS_XP, "7-day streak bonus")
+                }
+            } else if (userAfterXpGain.lastActivityDate == null || !isYesterday(
+                    userAfterXpGain.lastActivityDate!!,
+                    now
+                )
+            ) {
+                userAfterXpGain.dailyStreak = 1
+            }
+            userAfterXpGain.lastActivityDate = now
+            userRepository.save(userAfterXpGain)
+            return userAfterXpGain
+        } else {
+            return user
+        }
+    }
+
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
         val userPage = userRepository.findAll(pageable)
         val userDTOs = userPage.content.map { user ->
@@ -342,6 +419,7 @@ class UserService(
             coursesInProgress = coursesInProgressDTO?.ifEmpty { null },
             completedCoursesCount = completedCoursesCount,
             createdCourses = createdCoursesDTO?.ifEmpty { null },
+            level = requestedUser.level
         )
     }
 
@@ -385,5 +463,17 @@ class UserService(
         )
 
         return aggregationResults.mappedResults
+    }
+
+    private fun isSameDay(date1: Instant, date2: Instant): Boolean {
+        val d1 = date1.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        val d2 = date2.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        return d1.isEqual(d2)
+    }
+
+    private fun isYesterday(dateToCheck: Instant, currentDate: Instant): Boolean {
+        val d1 = dateToCheck.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        val d2 = currentDate.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        return d1.isEqual(d2.minusDays(1))
     }
 }

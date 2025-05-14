@@ -22,7 +22,8 @@ class CourseProgressService(
     private val courseRepository: CourseRepository,
     private val certificateService: CertificateService,
     private val authorizationService: AuthorizationService,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    private val userService: UserService
 ) {
     private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
 
@@ -93,6 +94,18 @@ class CourseProgressService(
 
         val savedProgress = courseProgressRepository.save(updatedProgress)
 
+        val student = userRepository.findById(currentUserId).orElse(null)
+        val courseEntity = courseRepository.findById(courseId).orElse(null)
+        val lessonEntity = courseEntity?.lessons?.find { it.id == lessonId }
+
+        if (student != null && lessonEntity != null && courseEntity != null) {
+            userService.gainXp(
+                currentUserId,
+                UserService.XP_FOR_LESSON_COMPLETION,
+                "lesson completion: ${lessonEntity.title}"
+            )
+        }
+
         if (savedProgress.progress >= 100.0) {
             val course = courseRepository.findById(courseId).orElse(null)
             val courseTitle = course?.title ?: "курс"
@@ -129,6 +142,14 @@ class CourseProgressService(
                     currentUserId,
                     e.message,
                     e
+                )
+            }
+
+            if (student != null && courseEntity != null) {
+                userService.gainXp(
+                    currentUserId,
+                    UserService.XP_FOR_COURSE_COMPLETION,
+                    "course completion: ${courseEntity.title}"
                 )
             }
         }

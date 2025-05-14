@@ -29,7 +29,8 @@ class ReviewService(
     private val courseRepository: CourseRepository,
     private val mongoTemplate: MongoTemplate,
     private val authorizationService: AuthorizationService,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    private val userService: UserService
 ) {
     @Transactional
     @CacheEvict(value = ["courses"], key = "#slug")
@@ -57,6 +58,8 @@ class ReviewService(
         )
         val savedReview = reviewRepository.save(review)
         updateCourseAverageRating(courseId)
+
+        userService.gainXp(authorId, UserService.XP_FOR_REVIEW, "review for course ID: $courseId")
 
         val course = courseRepository.findById(courseId).orElse(null)
         if (course != null && course.authorId != authorId) {

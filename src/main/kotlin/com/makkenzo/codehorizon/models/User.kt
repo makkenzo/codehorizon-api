@@ -23,5 +23,10 @@ data class User(
     val accountSettings: AccountSettings? = AccountSettings(),
     @Indexed
     val createdAt: Instant = Instant.now(),
-    val authorities: List<String>? = null
+    val authorities: List<String>? = null,
+    var xp: Long = 0L,
+    var level: Int = 1,
+    var xpForNextLevel: Long = 100L,
+    var dailyStreak: Int = 0,
+    var lastActivityDate: Instant? = null
 ) : Serializable
