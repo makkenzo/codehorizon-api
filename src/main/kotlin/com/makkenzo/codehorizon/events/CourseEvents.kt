@@ -1,6 +1,7 @@
 package com.makkenzo.codehorizon.events
 
 import org.springframework.context.ApplicationEvent
+import java.time.Instant
 
 data class CoursePurchasedEvent(
     val eventSource: Any,
@@ -20,7 +21,8 @@ data class CourseCompletedEvent(
     val courseId: String,
     val courseTitle: String,
     val courseSlug: String,
-    val courseAuthorId: String
+    val courseAuthorId: String,
+    val completedAt: Instant
 ) : ApplicationEvent(eventSource)
 
 data class NewReviewOnCourseEvent(

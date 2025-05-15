@@ -85,26 +85,26 @@ class CourseProgressService(
         }
 
         val updatedCompletedLessons = courseProgress.completedLessons.toMutableSet()
-        val wasAlreadyCompleted = updatedCompletedLessons.contains(lessonId)
-        val addedNewCompletion = updatedCompletedLessons.add(lessonId)
+        val wasAlreadyCompletedThisLesson = updatedCompletedLessons.contains(lessonId)
 
-        if (wasAlreadyCompleted) {
-            logger.info(
-                "Урок {} в курсе {} уже был отмечен как пройденный для пользователя {}. Обновляем только lastUpdated.",
-                lessonId,
-                courseId,
-                currentUserId
-            )
+        val addedNewCompletion = if (!wasAlreadyCompletedThisLesson) updatedCompletedLessons.add(lessonId) else false
+
+        if (wasAlreadyCompletedThisLesson && courseProgress.progress >= 100.0) {
             return courseProgressRepository.save(courseProgress.copy(lastUpdated = Instant.now()))
         }
 
         val newProgressValue = (updatedCompletedLessons.size.toDouble() / totalLessons.toDouble()) * 100.0
+        val previousProgress = courseProgress.progress
 
         val updatedProgress = courseProgress.copy(
             completedLessons = updatedCompletedLessons.toList(),
             progress = newProgressValue.coerceIn(0.0, 100.0),
             lastUpdated = Instant.now()
         )
+
+        if (updatedProgress.progress >= 100.0 && (courseProgress.completedAt == null || previousProgress < 100.0)) {
+            updatedProgress.completedAt = Instant.now()
+        }
 
         val savedProgress = courseProgressRepository.save(updatedProgress)
 
@@ -120,7 +120,6 @@ class CourseProgressService(
                 )
                 userService.recordLessonCompletionActivity(currentUserId)
             }
-
             eventPublisher.publishEvent(LessonCompletedEvent(this, currentUserId, lessonId, courseId))
             userActivityService.incrementLessonsCompletedToday(currentUserId)
         }
@@ -172,7 +171,8 @@ class CourseProgressService(
                         courseId,
                         courseEntity.title,
                         courseEntity.slug,
-                        courseEntity.authorId
+                        courseEntity.authorId,
+                        savedProgress.completedAt ?: Instant.now()
                     )
                 )
             }

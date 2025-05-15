@@ -16,4 +16,9 @@ interface CourseProgressRepository : MongoRepository<CourseProgress, String> {
     fun findByCourseId(courseId: String): List<CourseProgress>
     fun countByCourseIdAndLastUpdatedAfter(courseId: String, date: Instant): Long
     fun findByUserIdAndProgressGreaterThanEqual(userId: String, progress: Double): List<CourseProgress>
+    fun countByCourseIdAndProgressGreaterThanEqual(courseId: String, progress: Double): Int
+    fun findByUserIdAndCompletedAtIsNotNullOrderByCompletedAtAsc(
+        userId: String,
+        pageable: Pageable
+    ): List<CourseProgress>
 }

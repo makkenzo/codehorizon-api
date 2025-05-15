@@ -10,4 +10,5 @@ interface WishlistRepository : MongoRepository<WishlistItem, String> {
     fun findByUserId(userId: String, pageable: Pageable): Page<WishlistItem>
     fun existsByUserIdAndCourseId(userId: String, courseId: String): Boolean
     fun deleteByUserIdAndCourseId(userId: String, courseId: String)
+    fun countByUserId(userId: String): Long
 }

@@ -12,5 +12,6 @@ data class CourseProgress(
     val courseId: String,
     val completedLessons: List<String> = emptyList(),
     val progress: Double = 0.0,
-    val lastUpdated: Instant = Instant.now()
+    val lastUpdated: Instant = Instant.now(),
+    var completedAt: Instant? = null
 ) : Serializable
