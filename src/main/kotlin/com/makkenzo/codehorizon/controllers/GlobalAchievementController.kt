@@ -2,6 +2,7 @@ package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.dtos.GlobalAchievementDTO
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
+import com.makkenzo.codehorizon.services.AdminAchievementManagementService
 import com.makkenzo.codehorizon.services.GlobalAchievementService
 import com.makkenzo.codehorizon.services.UserService
 import io.swagger.v3.oas.annotations.Operation
@@ -23,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Achievements", description = "Операции с достижениями")
 class GlobalAchievementController(
     private val userService: UserService,
-    private val achievementService: GlobalAchievementService
+    private val achievementService: GlobalAchievementService,
+    private val achievementDefinitionService: AdminAchievementManagementService
 ) {
     private fun parseSortParameter(sortBy: String?): Sort {
         if (sortBy.isNullOrBlank()) return Sort.by(Sort.Direction.ASC, "order")
@@ -61,5 +63,12 @@ class GlobalAchievementController(
 
         val achievementsPage = achievementService.getAllDefinitions(pageable, userId, status, category, q)
         return ResponseEntity.ok(achievementsPage)
+    }
+
+    @GetMapping("/categories")
+    @Operation(summary = "Получить список уникальных категорий достижений")
+    fun getAchievementCategories(): ResponseEntity<List<String>> {
+        val categories = achievementDefinitionService.getDistinctAchievementCategories()
+        return ResponseEntity.ok(categories)
     }
 }

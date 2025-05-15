@@ -4,11 +4,17 @@ import com.makkenzo.codehorizon.models.Achievement
 import com.makkenzo.codehorizon.repositories.AchievementRepository
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-class AdminAchievementManagementService(private val achievementRepository: AchievementRepository) {
+class AdminAchievementManagementService(
+    private val achievementRepository: AchievementRepository,
+    private val mongoTemplate: MongoTemplate
+) {
     @Cacheable("allAchievementsDefinitions")
     fun getAllAchievements(): List<Achievement> = achievementRepository.findAll().sortedBy { it.order }
 
@@ -56,5 +62,12 @@ class AdminAchievementManagementService(private val achievementRepository: Achie
         } else {
             false
         }
+    }
+
+    @Cacheable("achievementCategories")
+    fun getDistinctAchievementCategories(): List<String> {
+        val query = Query().addCriteria(Criteria.where("category").ne(null).ne(""))
+        val categories = mongoTemplate.findDistinct(query, "category", "achievements", String::class.java)
+        return categories.sorted()
     }
 }
