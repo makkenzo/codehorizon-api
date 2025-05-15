@@ -51,6 +51,7 @@ class SecurityConfig(
                         "/api/search",
                         "/api/users/{username}/certificates/public",
                         "/api/users/{username}/achievements/public",
+                        "/api/achievements/all",
                         "/swagger-ui/**", "/v3/api-docs/**",
                         "/actuator/prometheus"
                     ).permitAll()

@@ -30,5 +30,6 @@ data class Achievement(
     val triggerThreshold: Int,
     val xpBonus: Long = 0L,
     val isGlobal: Boolean = true,
-    val order: Int = 0
+    val order: Int = 0,
+    val category: String? = null,
 )

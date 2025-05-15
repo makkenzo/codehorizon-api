@@ -477,6 +477,10 @@ class UserService(
         return aggregationResults.mappedResults
     }
 
+    fun findByUsername(username: String): User? {
+        return userRepository.findByUsername(username)
+    }
+
     private fun isSameDay(date1: Instant, date2: Instant): Boolean {
         val d1 = date1.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
         val d2 = date2.atZone(java.time.ZoneId.systemDefault()).toLocalDate()

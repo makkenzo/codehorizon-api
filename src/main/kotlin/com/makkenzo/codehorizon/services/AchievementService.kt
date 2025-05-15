@@ -25,6 +25,10 @@ class AchievementService(
 ) {
     private val logger = LoggerFactory.getLogger(AchievementService::class.java)
 
+    fun getAllDefinitions(): List<Achievement> {
+        return achievementRepository.findAll().sortedBy { it.order }
+    }
+
     @Transactional
     fun retroactivelyCheckAndGrantAllAchievementsForAllUsers(specificAchievementKeys: List<String>? = null) {
         logger.info("Начало ретроактивной проверки достижений для всех пользователей (scheduled)...")
