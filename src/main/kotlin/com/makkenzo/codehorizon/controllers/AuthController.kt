@@ -70,7 +70,7 @@ class AuthController(
                 .maxAge(60 * 60 * 24L) // 24 часа
                 .build()
 
-            userService.updateUserDailyActivity(user.id!!)
+            userService.recordUserLogin(user.id!!)
 
             ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
@@ -146,7 +146,7 @@ class AuthController(
             xp = currentUserEntity.xp,
             level = currentUserEntity.level,
             xpForNextLevel = currentUserEntity.xpForNextLevel,
-            dailyStreak = currentUserEntity.dailyStreak,
+            dailyStreak = currentUserEntity.dailyLoginStreak,
             permissions = permissions
         )
         return ResponseEntity.ok(userDto)

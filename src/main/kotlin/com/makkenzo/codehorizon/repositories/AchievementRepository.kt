@@ -8,4 +8,5 @@ interface AchievementRepository : MongoRepository<Achievement, String> {
     fun findByKey(key: String): Achievement?
     fun findByTriggerType(triggerType: AchievementTriggerType): List<Achievement>
     fun findByKeyIn(keys: List<String>): List<Achievement>
+    fun findByPrerequisitesIsEmpty(): List<Achievement>
 }

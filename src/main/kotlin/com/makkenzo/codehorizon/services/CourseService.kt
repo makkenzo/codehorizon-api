@@ -1,8 +1,12 @@
 package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.events.CourseCreatedByMentorEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.*
+import com.makkenzo.codehorizon.models.Course
+import com.makkenzo.codehorizon.models.CourseDifficultyLevels
+import com.makkenzo.codehorizon.models.CourseProgress
+import com.makkenzo.codehorizon.models.Lesson
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -12,6 +16,7 @@ import org.bson.Document
 import org.bson.types.ObjectId
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -40,7 +45,7 @@ class CourseService(
     private val mediaProcessingService: MediaProcessingService,
     private val cloudflareService: CloudflareService,
     private val authorizationService: AuthorizationService,
-    private val achievementService: AchievementService
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     fun findAllCoursesAdmin(
         pageable: Pageable,
@@ -143,6 +148,7 @@ class CourseService(
     }
 
     @CacheEvict(value = ["courses"], allEntries = true)
+    @Transactional
     fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
         val creatorUser = authorizationService.getCurrentUserEntity()
         var effectiveAuthorId = request.authorId
@@ -204,11 +210,20 @@ class CourseService(
             userRepository.save(author)
 
             val courseCount = author.createdCourseIds.size
-            achievementService.checkAndGrantAchievements(
-                author.id!!,
-                AchievementTriggerType.COURSE_CREATION_COUNT,
-                courseCount
-            )
+            if (author.roles.any {
+                    it.equals("ROLE_MENTOR", ignoreCase = true) || it.equals(
+                        "MENTOR",
+                        ignoreCase = true
+                    )
+                }) {
+                eventPublisher.publishEvent(
+                    CourseCreatedByMentorEvent(
+                        this,
+                        author.id!!,
+                        savedCourse.id!!
+                    )
+                )
+            }
         }
 
         mediaProcessingService.updateCourseVideoLengthAsync(savedCourse.id!!)

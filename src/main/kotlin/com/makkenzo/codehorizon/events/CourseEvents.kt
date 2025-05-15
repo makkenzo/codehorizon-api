@@ -33,3 +33,9 @@ data class NewReviewOnCourseEvent(
     val courseSlug: String,
     val reviewAuthorUsername: String
 ) : ApplicationEvent(eventSource)
+
+data class CourseCreatedByMentorEvent(
+    val eventSource: Any,
+    val mentorId: String,
+    val courseId: String
+) : ApplicationEvent(eventSource)

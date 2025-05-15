@@ -27,6 +27,9 @@ data class User(
     var xp: Long = 0L,
     var level: Int = 1,
     var xpForNextLevel: Long = 100L,
-    var dailyStreak: Int = 0,
-    var lastActivityDate: Instant? = null
+    var dailyLoginStreak: Int = 0,
+    var lastLoginDate: Instant? = null,
+    var lessonCompletionStreakDaily: Int = 0,
+    var lastLessonActivityDate: Instant? = null,
+    var totalLessonsCompleted: Long = 0L
 ) : Serializable

@@ -2,14 +2,16 @@ package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.dtos.UserCourseDTO
+import com.makkenzo.codehorizon.events.CourseCompletedEvent
+import com.makkenzo.codehorizon.events.LessonCompletedEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.AchievementTriggerType
 import com.makkenzo.codehorizon.models.CourseProgress
 import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,7 +27,7 @@ class CourseProgressService(
     private val authorizationService: AuthorizationService,
     private val notificationService: NotificationService,
     private val userService: UserService,
-    private val achievementService: AchievementService,
+    private val eventPublisher: ApplicationEventPublisher,
     private val userActivityService: UserActivityService
 ) {
     private val logger = LoggerFactory.getLogger(CourseProgressService::class.java)
@@ -75,54 +77,57 @@ class CourseProgressService(
         val courseProgress = courseProgressRepository.findByUserIdAndCourseId(currentUserId, courseId)
             ?: throw NotFoundException("Прогресс для пользователя $currentUserId и курса $courseId не найден. Возможно, нет доступа?")
 
-        val course = courseRepository.findById(courseId)
-            .orElseThrow { NotFoundException("Курс с ID $courseId не найден для расчета прогресса") }
+        val courseEntity = courseRepository.findById(courseId).orElse(null)
 
-        val totalLessons = course.lessons.size
+        val totalLessons = courseEntity.lessons.size
         if (totalLessons == 0) {
-            return courseProgress.copy(progress = 0.0, lastUpdated = Instant.now())
+            return courseProgressRepository.save(courseProgress.copy(lastUpdated = Instant.now()))
         }
 
         val updatedCompletedLessons = courseProgress.completedLessons.toMutableSet()
-        val added = updatedCompletedLessons.add(lessonId)
+        val wasAlreadyCompleted = updatedCompletedLessons.contains(lessonId)
+        val addedNewCompletion = updatedCompletedLessons.add(lessonId)
 
-        val newProgress = (updatedCompletedLessons.size.toDouble() / totalLessons.toDouble()) * 100.0
+        if (wasAlreadyCompleted) {
+            logger.info(
+                "Урок {} в курсе {} уже был отмечен как пройденный для пользователя {}. Обновляем только lastUpdated.",
+                lessonId,
+                courseId,
+                currentUserId
+            )
+            return courseProgressRepository.save(courseProgress.copy(lastUpdated = Instant.now()))
+        }
 
+        val newProgressValue = (updatedCompletedLessons.size.toDouble() / totalLessons.toDouble()) * 100.0
 
         val updatedProgress = courseProgress.copy(
             completedLessons = updatedCompletedLessons.toList(),
-            progress = newProgress.coerceIn(0.0, 100.0),
+            progress = newProgressValue.coerceIn(0.0, 100.0),
             lastUpdated = Instant.now()
         )
 
         val savedProgress = courseProgressRepository.save(updatedProgress)
 
         val student = userRepository.findById(currentUserId).orElse(null)
-        val courseEntity = courseRepository.findById(courseId).orElse(null)
-        val lessonEntity = courseEntity?.lessons?.find { it.id == lessonId }
+        val lessonEntity = courseEntity.lessons.find { it.id == lessonId }
 
-        if (student != null && lessonEntity != null) {
-            userService.gainXp(
-                currentUserId,
-                UserService.XP_FOR_LESSON_COMPLETION,
-                "lesson completion: ${lessonEntity.title}"
-            )
+        if (addedNewCompletion) {
+            if (student != null && lessonEntity != null) {
+                userService.gainXp(
+                    currentUserId,
+                    UserService.XP_FOR_LESSON_COMPLETION,
+                    "Завершение урока: ${lessonEntity.title}"
+                )
+                userService.recordLessonCompletionActivity(currentUserId)
+            }
+
+            eventPublisher.publishEvent(LessonCompletedEvent(this, currentUserId, lessonId, courseId))
+            userActivityService.incrementLessonsCompletedToday(currentUserId)
         }
 
-        if (added) {
-            val dailyStats = userActivityService.incrementLessonsCompletedToday(currentUserId)
-            achievementService.checkAndGrantAchievements(
-                currentUserId,
-                AchievementTriggerType.LESSON_COMPLETION_STREAK,
-                dailyStats.lessonsCompletedCount
-            )
-        }
-
-        if (savedProgress.progress >= 100.0) {
-            val course = courseRepository.findById(courseId).orElse(null)
-            val courseTitle = course?.title ?: "курс"
-            val courseSlug = course?.slug ?: courseId
-
+        if (savedProgress.progress >= 100.0 && courseProgress.progress < 100.0) {
+            val courseTitle = courseEntity.title
+            val courseSlug = courseEntity.slug
 
             notificationService.createNotification(
                 userId = currentUserId,
@@ -131,53 +136,44 @@ class CourseProgressService(
                 link = "/courses/$courseSlug"
             )
 
-            if (course != null && course.authorId != currentUserId) {
-                notificationService.createNotification(
-                    userId = course.authorId,
-                    type = NotificationType.LESSON_COMPLETED_BY_STUDENT,
-                    message = "Пользователь ${authorizationService.getCurrentUserEntity().username} завершил ваш курс \"${course.title}\".",
-                    link = "/admin/courses/${course.id}/students"
-                )
+            if (courseEntity.authorId != currentUserId) {
+                val authorUser = userRepository.findById(courseEntity.authorId).orElse(null)
+                if (authorUser != null) {
+                    notificationService.createNotification(
+                        userId = courseEntity.authorId,
+                        type = NotificationType.COURSE_COMPLETED_BY_STUDENT,
+                        message = "Пользователь ${student?.username ?: "студент"} завершил ваш курс \"${courseEntity.title}\".",
+                        link = "/admin/courses/${courseEntity.id}/students"
+                    )
+                }
             }
 
-            logger.info(
-                "Прогресс курса {} для пользователя {} достиг 100%. Попытка создания сертификата.",
-                courseId,
-                currentUserId
-            )
             try {
                 certificateService.createCertificateRecord(currentUserId, courseId)
             } catch (e: Exception) {
                 logger.error(
                     "Не удалось создать запись о сертификате для курса {} пользователя {}: {}",
-                    courseId,
-                    currentUserId,
-                    e.message,
-                    e
+                    courseId, currentUserId, e.message, e
                 )
             }
 
-            if (student != null && courseEntity != null) {
+            if (student != null) {
                 userService.gainXp(
                     currentUserId,
                     UserService.XP_FOR_COURSE_COMPLETION,
-                    "course completion: ${courseEntity.title}"
+                    "Завершение курса: ${courseEntity.title}"
                 )
-            }
-
-            if (courseProgress.progress < 100.0) {
-                userService.gainXp(
-                    currentUserId,
-                    UserService.XP_FOR_COURSE_COMPLETION,
-                    "course completion: ${courseEntity.title}"
-                )
-                achievementService.checkAndGrantAchievements(
-                    currentUserId,
-                    AchievementTriggerType.COURSE_COMPLETION_COUNT
-                )
-                achievementService.checkAndGrantAchievements(
-                    currentUserId,
-                    AchievementTriggerType.FIRST_COURSE_COMPLETED
+                eventPublisher.publishEvent(
+                    CourseCompletedEvent(
+                        this,
+                        currentUserId,
+                        student.username,
+                        student.email,
+                        courseId,
+                        courseEntity.title,
+                        courseEntity.slug,
+                        courseEntity.authorId
+                    )
                 )
             }
         }

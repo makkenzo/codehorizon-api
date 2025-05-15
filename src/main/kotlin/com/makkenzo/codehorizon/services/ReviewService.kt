@@ -1,13 +1,14 @@
 package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.events.ReviewCreatedEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.AchievementTriggerType
 import com.makkenzo.codehorizon.models.NotificationType
 import com.makkenzo.codehorizon.models.Review
 import com.makkenzo.codehorizon.repositories.*
 import org.bson.Document
 import org.springframework.cache.annotation.CacheEvict
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -32,7 +33,7 @@ class ReviewService(
     private val authorizationService: AuthorizationService,
     private val notificationService: NotificationService,
     private val userService: UserService,
-    private val achievementService: AchievementService
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     @Transactional
     @CacheEvict(value = ["courses"], key = "#slug")
@@ -62,8 +63,7 @@ class ReviewService(
         updateCourseAverageRating(courseId)
 
         userService.gainXp(authorId, UserService.XP_FOR_REVIEW, "review for course ID: $courseId")
-        achievementService.checkAndGrantAchievements(authorId, AchievementTriggerType.REVIEW_COUNT)
-        achievementService.checkAndGrantAchievements(authorId, AchievementTriggerType.FIRST_REVIEW_WRITTEN)
+        eventPublisher.publishEvent(ReviewCreatedEvent(this, authorId, savedReview.id!!, courseId))
 
         val course = courseRepository.findById(courseId).orElse(null)
         if (course != null && course.authorId != authorId) {

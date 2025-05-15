@@ -3,12 +3,17 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.UpdateNotificationPreferencesRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdatePrivacySettingsRequestDTO
 import com.makkenzo.codehorizon.dtos.UpdateProfileDTO
-import com.makkenzo.codehorizon.models.*
+import com.makkenzo.codehorizon.events.ProfileUpdatedEvent
+import com.makkenzo.codehorizon.models.AccountSettings
+import com.makkenzo.codehorizon.models.NotificationPreferences
+import com.makkenzo.codehorizon.models.PrivacySettings
+import com.makkenzo.codehorizon.models.Profile
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
@@ -25,7 +30,7 @@ class ProfileService(
     private val cloudflareService: CloudflareService,
     private val authorizationService: AuthorizationService,
     private val userRepository: UserRepository,
-    private val achievementService: AchievementService
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     private val logger = LoggerFactory.getLogger(ProfileService::class.java)
 
@@ -119,7 +124,7 @@ class ProfileService(
     }
 
     @Transactional
-    @CacheEvict(value = ["profiles"], key = "#result.userId")
+    @CacheEvict(value = ["profiles", "userProfiles", "userAccountSettings"], key = "#result.userId")
     fun updateProfile(updatedProfileDTO: UpdateProfileDTO): Profile {
         val currentUserId = authorizationService.getCurrentUserEntity().id!!
         val existingProfile = profileRepository.findByUserId(currentUserId)
@@ -129,10 +134,6 @@ class ProfileService(
         val oldSignatureUrl = existingProfile.signatureUrl
         val newAvatarUrl = updatedProfileDTO.avatarUrl
         val newSignatureUrl = updatedProfileDTO.signatureUrl
-
-        val avatarChanged =
-            updatedProfileDTO.avatarUrl != null && updatedProfileDTO.avatarUrl != existingProfile.avatarUrl
-        val currentAvatarUrl = updatedProfileDTO.avatarUrl ?: existingProfile.avatarUrl
 
         val profileToUpdate = existingProfile.copy(
             avatarUrl = newAvatarUrl,
@@ -159,11 +160,7 @@ class ProfileService(
         }
 
         val completionPercentage = calculateProfileCompletionPercentage(savedProfile)
-        achievementService.checkAndGrantAchievements(
-            savedProfile.userId,
-            AchievementTriggerType.PROFILE_COMPLETION_PERCENT,
-            completionPercentage
-        )
+        eventPublisher.publishEvent(ProfileUpdatedEvent(this, savedProfile.userId, completionPercentage))
 
         return savedProfile
     }

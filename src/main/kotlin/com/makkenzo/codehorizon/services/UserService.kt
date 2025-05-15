@@ -1,6 +1,8 @@
 package com.makkenzo.codehorizon.services
 
 import com.makkenzo.codehorizon.dtos.*
+import com.makkenzo.codehorizon.events.UserLeveledUpEvent
+import com.makkenzo.codehorizon.events.UserLoggedInEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
@@ -8,6 +10,7 @@ import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.ProfileRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -19,8 +22,11 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.regex.Pattern
 
 @Service
@@ -34,95 +40,117 @@ class UserService(
     private val mongoTemplate: MongoTemplate,
     private val authorizationService: AuthorizationService,
     private val achievementService: AchievementService,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     companion object {
         const val XP_FOR_LESSON_COMPLETION: Long = 10
         const val XP_FOR_COURSE_COMPLETION: Long = 100
-        const val XP_FOR_REVIEW: Long = 5
-        const val XP_FOR_DAILY_ACTIVITY: Long = 5
+        const val XP_FOR_REVIEW: Long = 15
+        const val XP_FOR_DAILY_LOGIN: Long = 5
         const val XP_BASE_FOR_NEXT_LEVEL: Long = 100
-        const val STREAK_BONUS_3_DAYS_XP: Long = 15
-        const val STREAK_BONUS_7_DAYS_XP: Long = 35
+        const val STREAK_BONUS_3_DAYS_XP: Long = 25
+        const val STREAK_BONUS_7_DAYS_XP: Long = 75
+        const val XP_LEVEL_SCALING_FACTOR: Long = 50
     }
 
     fun calculateXpForNextLevel(level: Int): Long {
         if (level <= 0) return XP_BASE_FOR_NEXT_LEVEL
-        return XP_BASE_FOR_NEXT_LEVEL + ((level - 1) * 50L).coerceAtLeast(0L)
+        return XP_BASE_FOR_NEXT_LEVEL + ((level - 1) * XP_LEVEL_SCALING_FACTOR)
     }
 
     fun gainXp(userId: String, amount: Long, activityType: String): User? {
+        if (amount <= 0) return userRepository.findById(userId).orElse(null)
+
         val user = userRepository.findById(userId).orElse(null)
             ?: run {
                 return null
             }
 
-        if (amount <= 0) {
-            return user
-        }
-
+        val oldLevel = user.level
         user.xp += amount
 
-        var levelIncreased = false
+        var levelsGained = 0
         while (user.xp >= user.xpForNextLevel) {
             user.xp -= user.xpForNextLevel
             user.level += 1
             user.xpForNextLevel = calculateXpForNextLevel(user.level)
-            levelIncreased = true
-            // TODO: Отправить событие/уведомление о повышении уровня (ApplicationEventPublisher)
-            // eventPublisher.publishEvent(UserLeveledUpEvent(this, user.id!!, user.level))
+            levelsGained++
         }
 
-        return userRepository.save(user)
+        val savedUser = userRepository.save(user)
+
+        if (levelsGained > 0) {
+            eventPublisher.publishEvent(UserLeveledUpEvent(this, userId, savedUser.level, oldLevel))
+        }
+        achievementService.checkAndGrantAchievements(userId, AchievementTriggerType.TOTAL_XP_EARNED, user.xp.toInt())
+
+        return savedUser
     }
 
-    fun updateUserDailyActivity(userId: String): User? {
-        val user = userRepository.findById(userId).orElse(null)
-            ?: run {
-                return null
-            }
+    @Transactional
+    fun recordUserLogin(userId: String): User? {
+        val user = userRepository.findById(userId).orElse(null) ?: return null
 
         val now = Instant.now()
-        var userModified = false
+        val today = LocalDate.ofInstant(now, ZoneOffset.UTC)
+        val lastLoginDay = user.lastLoginDate?.let { LocalDate.ofInstant(it, ZoneOffset.UTC) }
 
-        if (user.lastActivityDate == null || !isSameDay(user.lastActivityDate!!, now)) {
-            gainXp(userId, XP_FOR_DAILY_ACTIVITY, "daily login/activity bonus")
+        if (lastLoginDay == null || !lastLoginDay.isEqual(today)) {
+            gainXp(userId, XP_FOR_DAILY_LOGIN, "Daily login bonus")
 
-            val userAfterXpGain = userRepository.findById(userId).orElse(user)
-
-            if (userAfterXpGain.lastActivityDate != null && isYesterday(userAfterXpGain.lastActivityDate!!, now)) {
-                userAfterXpGain.dailyStreak += 1
-
-                when (userAfterXpGain.dailyStreak) {
-                    3 -> {
-                        gainXp(userId, STREAK_BONUS_3_DAYS_XP, "3-day streak bonus")
-                        achievementService.checkAndGrantAchievements(
-                            userId,
-                            AchievementTriggerType.DAILY_LOGIN_STREAK
-                        )
-                    }
-
-                    7 -> {
-                        gainXp(userId, STREAK_BONUS_7_DAYS_XP, "7-day streak bonus")
-                        achievementService.checkAndGrantAchievements(userId, AchievementTriggerType.DAILY_LOGIN_STREAK)
-                    }
-
-                    else -> {
-                        achievementService.checkAndGrantAchievements(userId, AchievementTriggerType.DAILY_LOGIN_STREAK)
-                    }
-                }
-            } else if (userAfterXpGain.lastActivityDate == null || !isYesterday(
-                    userAfterXpGain.lastActivityDate!!,
-                    now
-                )
-            ) {
-                userAfterXpGain.dailyStreak = 1
+            if (lastLoginDay != null && lastLoginDay.isEqual(today.minusDays(1))) {
+                user.dailyLoginStreak += 1
+            } else if (lastLoginDay == null || !lastLoginDay.isEqual(today)) {
+                user.dailyLoginStreak = 1
             }
-            userAfterXpGain.lastActivityDate = now
-            userRepository.save(userAfterXpGain)
-            return userAfterXpGain
-        } else {
-            return user
+
+            user.lastLoginDate = now
+            val savedUser = userRepository.save(user)
+
+            eventPublisher.publishEvent(UserLoggedInEvent(this, userId))
+
+            when (savedUser.dailyLoginStreak) {
+                3 -> gainXp(userId, STREAK_BONUS_3_DAYS_XP, "3-day login streak bonus")
+                7 -> gainXp(userId, STREAK_BONUS_7_DAYS_XP, "7-day login streak bonus")
+            }
+            return savedUser
         }
+        return user
+    }
+
+    @Transactional
+    fun recordLessonCompletionActivity(userId: String): User? {
+        val user = userRepository.findById(userId).orElse(null) ?: return null
+
+        user.totalLessonsCompleted += 1
+
+        val now = Instant.now()
+        val today = LocalDate.ofInstant(now, ZoneOffset.UTC)
+        val lastLessonDay = user.lastLessonActivityDate?.let { LocalDate.ofInstant(it, ZoneOffset.UTC) }
+
+        if (lastLessonDay == null || !lastLessonDay.isEqual(today)) {
+            if (lastLessonDay != null && lastLessonDay.isEqual(today.minusDays(1))) {
+                user.lessonCompletionStreakDaily += 1
+            } else {
+                user.lessonCompletionStreakDaily = 1
+            }
+            user.lastLessonActivityDate = now
+        }
+
+        val savedUser = userRepository.save(user)
+
+        achievementService.checkAndGrantAchievements(
+            userId,
+            AchievementTriggerType.LESSON_COMPLETION_COUNT_TOTAL,
+            savedUser.totalLessonsCompleted.toInt()
+        )
+        achievementService.checkAndGrantAchievements(
+            userId,
+            AchievementTriggerType.LESSON_COMPLETION_STREAK_DAILY,
+            savedUser.lessonCompletionStreakDaily
+        )
+
+        return savedUser
     }
 
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
