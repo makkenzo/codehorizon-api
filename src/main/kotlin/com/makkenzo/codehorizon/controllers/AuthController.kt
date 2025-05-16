@@ -1,6 +1,8 @@
 package com.makkenzo.codehorizon.controllers
 
 import com.makkenzo.codehorizon.configs.CookieConfig
+import com.makkenzo.codehorizon.configs.KeyStrategy
+import com.makkenzo.codehorizon.configs.RateLimited
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.models.MailActionEnum
 import com.makkenzo.codehorizon.models.User
@@ -33,6 +35,12 @@ class AuthController(
 ) {
     @PostMapping("/register")
     @Operation(summary = "Регистрация пользователя")
+    @RateLimited(
+        limit = 10,
+        durationSeconds = 3600,
+        strategy = KeyStrategy.IP_ADDRESS,
+        keyPrefix = "rl_register_attempt_"
+    )
     fun register(@Valid @RequestBody request: RegisterRequestDTO): ResponseEntity<MessageResponseDTO> {
         return try {
             val user =
@@ -48,6 +56,7 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Аутентификация пользователя")
+    @RateLimited(limit = 5, durationSeconds = 60, strategy = KeyStrategy.IP_ADDRESS, keyPrefix = "rl_login_attempt_")
     fun login(@Valid @RequestBody request: LoginRequestDTO): ResponseEntity<Void> {
         val user = userService.authenticateUser(request.login, request.password)
         return if (user != null) {

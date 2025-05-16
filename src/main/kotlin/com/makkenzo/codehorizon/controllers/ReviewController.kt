@@ -1,5 +1,7 @@
 package com.makkenzo.codehorizon.controllers
 
+import com.makkenzo.codehorizon.configs.KeyStrategy
+import com.makkenzo.codehorizon.configs.RateLimited
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.exceptions.NotFoundException
 import com.makkenzo.codehorizon.repositories.CourseRepository
@@ -60,6 +62,12 @@ class ReviewController(
     @PostMapping
     @Operation(summary = "Создать отзыв для курса", security = [SecurityRequirement(name = "bearerAuth")])
     @PreAuthorize("hasAuthority('review:create')")
+    @RateLimited(
+        limit = 5,
+        durationSeconds = 3600,
+        strategy = KeyStrategy.USER_ID,
+        keyPrefix = "rl_create_review_user_"
+    )
     fun createReview(
         @PathVariable courseId: String,
         @Valid @RequestBody reviewDto: CreateReviewRequestDTO
