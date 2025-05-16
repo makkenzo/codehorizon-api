@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.*
@@ -34,17 +35,21 @@ class GradingService(
     }
 
     @Async("taskExecutor")
+    @Transactional
     fun gradeSubmission(submissionFromRequest: Submission, task: Task) {
         logger.info("Начало проверки ответа ID: ${submissionFromRequest.id} для задачи ID: ${task.id}, тип: ${task.taskType}")
 
-        val submissionOptional: Optional<Submission> = submissionRepository.findById(submissionFromRequest.id!!)
-
-        if (!submissionOptional.isPresent) {
-            logger.warn("Submission с ID ${submissionFromRequest.id} не найден перед началом проверки.")
+        var currentSubmission = submissionRepository.findById(submissionFromRequest.id!!)
+            .orElse(null) ?: run {
+            logger.warn("Submission with ID ${submissionFromRequest.id} not found before starting grading.")
             return
         }
 
-        var currentSubmission: Submission = submissionOptional.get().copy(
+        if (currentSubmission.status != SubmissionStatus.PENDING && currentSubmission.status != SubmissionStatus.ERROR) {
+            logger.warn("Submission ${currentSubmission.id} is already being processed or has been processed. Status: ${currentSubmission.status}. Skipping.")
+        }
+
+        currentSubmission = currentSubmission.copy(
             status = SubmissionStatus.CHECKING,
             checkedAt = Instant.now()
         )
@@ -53,21 +58,21 @@ class GradingService(
         var finalSubmissionState = currentSubmission
 
         try {
-            when (task.taskType) {
+            finalSubmissionState = when (task.taskType) {
                 TaskType.CODE_INPUT -> {
                     if (currentSubmission.answerCode.isNullOrBlank()) {
-                        finalSubmissionState = currentSubmission.copy(
+                        currentSubmission.copy(
                             status = SubmissionStatus.ERROR,
                             feedback = "Код ответа не может быть пустым.",
                             score = 0.0,
                             checkedAt = Instant.now()
                         )
                     } else if (task.language == ProgrammingLanguage.PYTHON) {
-                        finalSubmissionState = gradePythonCode(currentSubmission, task, pythonRunnerScriptContent)
+                        gradePythonCode(currentSubmission, task, pythonRunnerScriptContent)
                     } else {
-                        finalSubmissionState = currentSubmission.copy(
+                        currentSubmission.copy(
                             status = SubmissionStatus.ERROR,
-                            feedback = "Проверка для языка ${task.language} еще не реализована.",
+                            feedback = "Проверка для языка ${task.language?.displayName ?: "неизвестного"} еще не реализована.",
                             score = 0.0,
                             checkedAt = Instant.now()
                         )
@@ -77,7 +82,7 @@ class GradingService(
                 TaskType.TEXT_INPUT -> {
                     val isCorrect =
                         task.solution?.trim()?.equals(currentSubmission.answerText?.trim(), ignoreCase = true) ?: false
-                    finalSubmissionState = currentSubmission.copy(
+                    currentSubmission.copy(
                         status = if (isCorrect) SubmissionStatus.CORRECT else SubmissionStatus.INCORRECT,
                         score = if (isCorrect) 1.0 else 0.0,
                         feedback = if (isCorrect) "Ответ верный." else "Ответ неверный.",
@@ -86,8 +91,9 @@ class GradingService(
                 }
 
                 TaskType.MULTIPLE_CHOICE -> {
-                    val isCorrect = task.solution == currentSubmission.answerText
-                    finalSubmissionState = currentSubmission.copy(
+                    val isCorrect = task.solution == currentSubmission.answerText &&
+                            (task.options?.contains(task.solution) == true)
+                    currentSubmission.copy(
                         status = if (isCorrect) SubmissionStatus.CORRECT else SubmissionStatus.INCORRECT,
                         score = if (isCorrect) 1.0 else 0.0,
                         feedback = if (isCorrect) "Выбран верный вариант." else "Выбран неверный вариант.",
@@ -95,28 +101,26 @@ class GradingService(
                     )
                 }
             }
-            submissionRepository.save(finalSubmissionState)
-            logger.info("Проверка ответа ID: ${submissionFromRequest.id} завершена со статусом: ${finalSubmissionState.status}")
+
+            finalSubmissionState = submissionRepository.save(finalSubmissionState)
+            logger.info("Grading for submission ID: ${submissionFromRequest.id} completed with status: ${finalSubmissionState.status}, score: ${finalSubmissionState.score}")
+
+            if (finalSubmissionState.status == SubmissionStatus.CORRECT) {
+                // Проверка, не завершил ли пользователь урок/курс этим ответом
+            }
+
         } catch (e: Exception) {
-            logger.error("Критическая ошибка во время проверки ответа ID: ${submissionFromRequest.id}", e)
-            val errorSubmissionState = submissionRepository.findById(submissionFromRequest.id!!).map {
-                it.copy(
-                    status = SubmissionStatus.ERROR,
-                    feedback = "Внутренняя ошибка сервера при проверке: ${e.message?.take(100)}",
-                    checkedAt = Instant.now()
-                )
-            }.orElse(
-                currentSubmission.copy(
-                    status = SubmissionStatus.ERROR,
-                    feedback = "Внутренняя ошибка сервера при проверке (не удалось обновить из БД): ${
-                        e.message?.take(
-                            100
-                        )
-                    }",
-                    checkedAt = Instant.now()
-                )
+            logger.error(
+                "Critical error during grading submission ID: ${submissionFromRequest.id}. Task ID: ${task.id}",
+                e
             )
-            submissionRepository.save(errorSubmissionState)
+            val submissionOnError = submissionRepository.findById(submissionFromRequest.id!!).orElse(currentSubmission)
+            finalSubmissionState = submissionOnError.copy(
+                status = SubmissionStatus.ERROR,
+                feedback = "Внутренняя ошибка сервера при проверке: ${e.message?.take(150)}",
+                checkedAt = Instant.now()
+            )
+            submissionRepository.save(finalSubmissionState)
         }
     }
 
@@ -141,6 +145,7 @@ class GradingService(
             return submission.copy(
                 status = SubmissionStatus.ERROR,
                 feedback = "Ошибка подготовки тестовых данных.",
+                score = 0.0,
                 checkedAt = Instant.now()
             )
         }
@@ -153,23 +158,62 @@ class GradingService(
             memoryLimitMb = task.memoryLimitMb ?: 128L
         )
 
-        var overallStatus = SubmissionStatus.ERROR
+        var overallStatus: SubmissionStatus
         var overallScore = 0.0
         var feedbackMessage = dockerResult.error ?: "Проверка завершена."
         val parsedTestResults = mutableListOf<TestRunResult>()
         var compileError: String? = null
 
-        if (dockerResult.exitCode == 0 && dockerResult.error == null) {
+        if (dockerResult.error != null) {
+            overallStatus = when {
+                dockerResult.error.contains("timed out", ignoreCase = true) -> SubmissionStatus.TIMEOUT
+                dockerResult.error.contains("Out of Memory", ignoreCase = true) -> SubmissionStatus.ERROR
+                else -> SubmissionStatus.ERROR
+            }
+            feedbackMessage = dockerResult.error
+
+            task.testCases.forEach { tc ->
+                parsedTestResults.add(
+                    TestRunResult(
+                        testCaseId = tc.id,
+                        testCaseName = tc.name,
+                        passed = false,
+                        actualOutput = null,
+                        expectedOutput = tc.expectedOutput,
+                        errorMessage = dockerResult.error,
+                        executionTimeMs = dockerResult.executionTimeMs.takeIf { it > 0 }
+                    )
+                )
+            }
+        } else if (dockerResult.exitCode != 0 && dockerResult.stderr.isNotBlank() && dockerResult.stdout.isBlank()) {
+            overallStatus = SubmissionStatus.ERROR
+            compileError = dockerResult.stderr.take(1000)
+            feedbackMessage = "Ошибка выполнения кода: ${compileError}"
+            task.testCases.forEach { tc ->
+                parsedTestResults.add(
+                    TestRunResult(
+                        testCaseId = tc.id,
+                        testCaseName = tc.name,
+                        passed = false,
+                        actualOutput = null,
+                        expectedOutput = tc.expectedOutput,
+                        errorMessage = compileError,
+                        executionTimeMs = 0
+                    )
+                )
+            }
+        } else {
             try {
-                val fullOutputJson =
-                    objectMapper.readValue(dockerResult.stdout, object : TypeReference<Map<String, Any?>>() {})
+                val typeRef = object : TypeReference<Map<String, Any?>>() {}
+                val fullOutputJson = objectMapper.readValue(dockerResult.stdout, typeRef)
+
                 compileError = fullOutputJson["compile_error"] as? String
+                @Suppress("UNCHECKED_CAST")
                 val testResultsList = fullOutputJson["test_results"] as? List<Map<String, Any?>>
 
                 if (compileError != null) {
                     overallStatus = SubmissionStatus.ERROR
                     feedbackMessage = "Ошибка компиляции/импорта: $compileError"
-
                     task.testCases.forEach { tc ->
                         parsedTestResults.add(
                             TestRunResult(
@@ -185,19 +229,21 @@ class GradingService(
                     }
                 } else if (testResultsList != null) {
                     var passedCount = 0
-                    var totalPoints = 0
-                    var earnedPoints = 0
+                    var totalPointsFromTests = 0
+                    var earnedPointsFromTests = 0
 
                     for (resMap in testResultsList) {
-                        val tcId = resMap["testCaseId"] as? String ?: "unknown_id"
-                        val tc = task.testCases.find { it.id == tcId }
-                        totalPoints += tc?.points ?: 0
+                        val tcId = resMap["testCaseId"] as? String ?: "unknown_id_${UUID.randomUUID()}"
+                        val tcDefinition = task.testCases.find { it.id == tcId }
+                        val pointsForThisTest = tcDefinition?.points ?: 0
+                        totalPointsFromTests += pointsForThisTest
 
                         val passed = resMap["passed"] as? Boolean ?: false
                         if (passed) {
                             passedCount++
-                            earnedPoints += tc?.points ?: 0
+                            earnedPointsFromTests += pointsForThisTest
                         }
+                        @Suppress("UNCHECKED_CAST")
                         parsedTestResults.add(
                             TestRunResult(
                                 testCaseId = tcId,
@@ -212,39 +258,37 @@ class GradingService(
                     }
 
                     if (task.testCases.isNotEmpty()) {
-                        overallScore = if (totalPoints > 0) earnedPoints.toDouble() / totalPoints.toDouble() else 0.0
+                        overallScore =
+                            if (totalPointsFromTests > 0) earnedPointsFromTests.toDouble() / totalPointsFromTests.toDouble() else 0.0
                         overallStatus = when {
                             passedCount == task.testCases.size -> SubmissionStatus.CORRECT
                             passedCount > 0 -> SubmissionStatus.PARTIALLY_CORRECT
                             else -> SubmissionStatus.INCORRECT
                         }
-                        feedbackMessage = "Пройдено ${passedCount} из ${task.testCases.size} тестов."
+                        feedbackMessage =
+                            "Пройдено ${passedCount} из ${task.testCases.size} тестов. Набрано баллов: $earnedPointsFromTests из $totalPointsFromTests."
                     } else {
                         overallStatus = SubmissionStatus.CORRECT
                         overallScore = 1.0
                         feedbackMessage = "Код выполнен без ошибок (тест-кейсы отсутствуют)."
                     }
                 } else {
-                    feedbackMessage = "Не удалось разобрать результаты тестов из вывода Docker."
-                    logger.warn("Некорректный JSON от Docker stdout: ${dockerResult.stdout}")
+                    feedbackMessage = "Не удалось разобрать результаты тестов из вывода Docker (stdout)."
+                    logger.warn("Invalid JSON from Docker stdout: ${dockerResult.stdout.take(500)}")
+                    overallStatus = SubmissionStatus.ERROR
                 }
             } catch (e: Exception) {
                 logger.error(
-                    "Ошибка парсинга JSON результатов от Docker: ${e.message}. \nStdout: ${dockerResult.stdout}\nStderr: ${dockerResult.stderr}",
+                    "Error parsing JSON results from Docker: ${e.message}. Stdout: ${dockerResult.stdout.take(500)}, Stderr: ${
+                        dockerResult.stderr.take(
+                            500
+                        )
+                    }",
                     e
                 )
                 feedbackMessage = "Ошибка обработки результатов проверки."
                 overallStatus = SubmissionStatus.ERROR
             }
-        } else if (dockerResult.error != null && dockerResult.error.contains("timed out")) {
-            overallStatus = SubmissionStatus.TIMEOUT
-            feedbackMessage = dockerResult.error
-        } else {
-            feedbackMessage = "Ошибка выполнения кода. " + (dockerResult.error ?: "")
-            if (dockerResult.stderr.isNotBlank()) {
-                feedbackMessage += "\nStderr: ${dockerResult.stderr.take(500)}"
-            }
-            overallStatus = SubmissionStatus.ERROR
         }
 
         return submission.copy(

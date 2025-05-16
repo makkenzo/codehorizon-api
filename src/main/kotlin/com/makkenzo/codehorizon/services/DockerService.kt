@@ -4,11 +4,8 @@ import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.async.ResultCallback
 import com.github.dockerjava.api.command.BuildImageResultCallback
 import com.github.dockerjava.api.command.CreateContainerResponse
-import com.github.dockerjava.api.model.Bind
-import com.github.dockerjava.api.model.BuildResponseItem
-import com.github.dockerjava.api.model.Capability
-import com.github.dockerjava.api.model.Frame
-import com.github.dockerjava.api.model.HostConfig
+import com.github.dockerjava.api.exception.DockerClientException
+import com.github.dockerjava.api.model.*
 import com.github.dockerjava.core.DefaultDockerClientConfig
 import com.github.dockerjava.core.DockerClientImpl
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient
@@ -27,6 +24,7 @@ import java.time.Duration
 import java.util.*
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.absolutePathString
 
 
 @Service
@@ -55,69 +53,102 @@ class DockerService {
             Files.createDirectories(baseTempDir)
         }
 
+        ensureDockerAvailable()
         buildPythonImageIfNotExists()
+    }
+
+    private fun ensureDockerAvailable() {
+        try {
+            dockerClient.pingCmd().exec()
+            logger.info("Docker daemon is available.")
+        } catch (e: DockerClientException) {
+            logger.error("Docker daemon is not available or not responding: ${e.message}", e)
+            throw IllegalStateException("Docker daemon is not available. Grading service will be disabled.", e)
+        }
     }
 
     private fun buildPythonImageIfNotExists() {
         try {
-            logger.info("--- Начало проверки/сборки образа $pythonImageName ---")
-            val allImages = dockerClient.listImagesCmd().exec()
-            var imageFound = false
+            logger.info("--- Checking/Building Docker image: $pythonImageName ---")
+            val existingImage = dockerClient.listImagesCmd().withImageNameFilter(pythonImageName).exec()
 
-            logger.info("Список всех образов, видимых Docker-клиентом (${allImages.size} шт.):")
-            allImages.forEach { image ->
-                val tags = image.repoTags?.joinToString(", ") ?: "Без тегов"
-                logger.info(" - Теги: $tags, ID: ${image.id.take(12)}")
-                if (image.repoTags != null && image.repoTags.contains(pythonImageName)) {
-                    imageFound = true
+            if (existingImage.isNotEmpty()) {
+                logger.info("Docker image $pythonImageName found locally (ID: ${existingImage.first().id.take(12)}). Skipping build.")
+                logger.info("--- Docker image check for $pythonImageName complete ---")
+                return
+            }
+
+            logger.info("Docker image $pythonImageName NOT FOUND locally. Starting build...")
+
+            val dockerfileRelativePath = "docker/python-runner.Dockerfile"
+            val dockerContextPath = Paths.get(dockerfileRelativePath).parent?.toFile()
+                ?: Paths.get(".").toFile()
+            val dockerfile = dockerContextPath.resolve("python-runner.Dockerfile")
+
+            if (!dockerfile.exists()) {
+                logger.error("Dockerfile not found at path: ${dockerfile.absolutePath}")
+                throw IllegalStateException("Dockerfile not found for Python runner at ${dockerfile.absolutePath}")
+            }
+            logger.info("Using Dockerfile: ${dockerfile.absolutePath}, Context: ${dockerContextPath.absolutePath}")
+
+
+            val buildCallbackLog = object : BuildImageResultCallback() {
+                override fun onNext(item: BuildResponseItem?) {
+                    item?.stream?.trim()?.let { logMsg -> if (logMsg.isNotEmpty()) logger.info("Build log: $logMsg") }
+                    item?.progressDetail?.let { progress ->
+                        logger.debug("Build progress: current=${progress.current}, total=${progress.total}")
+                    }
+                    item?.errorDetail?.let { error ->
+                        logger.error("Build error detail: ${error.code} - ${error.message}")
+                    }
+                    super.onNext(item)
+                }
+
+                override fun onError(throwable: Throwable?) {
+                    logger.error("Build process error: ", throwable)
+                    super.onError(throwable)
+                }
+
+                override fun onComplete() {
+                    logger.info("BuildImageResultCallback onComplete triggered for $pythonImageName.")
+                    super.onComplete()
                 }
             }
 
-            if (imageFound) {
-                logger.info("Образ $pythonImageName НАЙДЕН в общем списке.")
-            } else {
-                logger.info("Образ $pythonImageName НЕ НАЙДЕН в общем списке. Начинаю сборку...")
-
-                val dockerfilePath = Paths.get("docker/python-runner.Dockerfile").toAbsolutePath().parent.toString()
-                val dockerfile = Paths.get(dockerfilePath, "python-runner.Dockerfile").toFile()
-
-                if (!dockerfile.exists()) {
-                    logger.error("Dockerfile не найден по пути: ${dockerfile.absolutePath}")
-                    throw IllegalStateException("Dockerfile not found for Python runner.")
-                }
-
-                val buildCallbackLog = object : BuildImageResultCallback() {
-                    override fun onNext(item: BuildResponseItem?) {
-                        item?.stream?.let { logger.info("Build log: $it") }
-                        item?.errorDetail?.let { logger.error("Build error detail: ${it.message}") }
-                        super.onNext(item)
-                    }
-
-                    override fun onError(throwable: Throwable?) {
-                        logger.error("Build onError: ", throwable)
-                        super.onError(throwable)
-                    }
-                }
+            try {
                 dockerClient.buildImageCmd(dockerfile)
                     .withTags(setOf(pythonImageName))
+                    .withDockerfile(dockerfile)
+                    .withPull(true)
                     .exec(buildCallbackLog)
                     .awaitCompletion()
-
-                logger.info("Сборка образа $pythonImageName должна была завершиться.")
-
-                val imagesAfterBuild = dockerClient.listImagesCmd().exec()
-                val stillNotFound =
-                    imagesAfterBuild.none { it.repoTags != null && it.repoTags.contains(pythonImageName) }
-                if (stillNotFound) {
-                    logger.error("!!! Образ $pythonImageName не появился в списке даже после попытки сборки !!!")
-                } else {
-                    logger.info("Образ $pythonImageName успешно собран и теперь виден.")
-                }
+            } catch (e: Exception) {
+                logger.error("Exception during buildImageCmd execution for $pythonImageName: ${e.message}", e)
+                throw IllegalStateException("Failed to build Docker image $pythonImageName due to: ${e.message}", e)
             }
-            logger.info("--- Конец проверки/сборки образа $pythonImageName ---")
+
+
+            val imagesAfterBuild = dockerClient.listImagesCmd().withImageNameFilter(pythonImageName).exec()
+            if (imagesAfterBuild.isEmpty()) {
+                logger.error("!!! Docker image $pythonImageName did NOT appear after build attempt !!! Check build logs above.")
+                throw IllegalStateException("Docker image $pythonImageName could not be built or found after build attempt.")
+            } else {
+                logger.info(
+                    "Docker image $pythonImageName successfully built/verified (ID: ${
+                        imagesAfterBuild.first().id.take(
+                            12
+                        )
+                    })."
+                )
+            }
+
+            logger.info("--- Docker image build for $pythonImageName complete ---")
+        } catch (e: DockerClientException) {
+            logger.error("Docker client error during image build/check for $pythonImageName: ${e.message}", e)
+            throw IllegalStateException("Docker client error for $pythonImageName: ${e.message}", e)
         } catch (e: Exception) {
-            logger.error("Критическая ошибка при проверке или сборке Docker-образа $pythonImageName: ${e.message}", e)
-            throw IllegalStateException("Failed to ensure Python runner Docker image is available", e)
+            logger.error("Critical error during Docker image build/check for $pythonImageName: ${e.message}", e)
+            throw IllegalStateException("Failed to ensure Python runner Docker image $pythonImageName is available", e)
         }
     }
 
@@ -126,25 +157,29 @@ class DockerService {
         testRunnerScript: String,
         testCasesJsonContent: String,
         timeoutSeconds: Long = 10,
-        memoryLimitMb: Long = 128
+        memoryLimitMb: Long = 128,
+        cpuQuotaMicroseconds: Long = 50000
     ): DockerExecutionResult {
         var permitAcquired = false
+        val runId = UUID.randomUUID().toString()
+        val tempRunDir: Path = baseTempDir.resolve(runId)
+
         try {
             if (!containerExecutionPermits.tryAcquire(timeoutSeconds + 5, TimeUnit.SECONDS)) {
-                logger.warn("Не удалось получить разрешение на запуск Docker-контейнера в течение ${timeoutSeconds + 5}с. Очередь переполнена или Docker занят.")
+                logger.warn("Timeout acquiring execution permit for Docker container (Run ID: $runId). Max permits: $maxConcurrentContainers. Queue may be full or Docker is busy.")
                 return DockerExecutionResult(
                     "", "", -1, 0,
                     "Execution permit not acquired; server busy. Please try again later."
                 )
             }
-
             permitAcquired = true
-            logger.debug("Разрешение на запуск Docker-контейнера получено. Осталось: ${containerExecutionPermits.availablePermits()}")
+            logger.debug("Execution permit acquired for Docker container (Run ID: $runId). Available permits: ${containerExecutionPermits.availablePermits()}")
 
-            val runId = UUID.randomUUID().toString()
-            val tempRunDir: Path = Files.createDirectory(baseTempDir.resolve(runId))
-            val hostPath = tempRunDir.toAbsolutePath().toString()
+            Files.createDirectories(tempRunDir)
+            val hostPath = tempRunDir.absolutePathString()
             val containerPath = "/usr/src/app/run_dir"
+
+            var containerId: String? = null
 
             try {
                 Files.writeString(
@@ -171,12 +206,15 @@ class DockerService {
 
                 val hostConfig = HostConfig.newHostConfig()
                     .withMemory(memoryLimitMb * 1024 * 1024)
-                    .withCpuQuota(50000)
+                    .withCpuQuota(cpuQuotaMicroseconds)
+                    .withCpuPeriod(100000L)
                     .withPrivileged(false)
                     .withNetworkMode("none")
                     .withBinds(Bind.parse("$hostPath:$containerPath:ro"))
                     .withCapDrop(Capability.ALL)
                     .withSecurityOpts(listOf("no-new-privileges"))
+                    .withPidsLimit(64L)
+                    .withReadonlyRootfs(true)
 
                 val containerResponse: CreateContainerResponse = dockerClient.createContainerCmd(pythonImageName)
                     .withHostConfig(hostConfig)
@@ -187,58 +225,97 @@ class DockerService {
                     .withUser("appuser")
                     .withEnv("PYTHONUNBUFFERED=1")
                     .exec()
-                val containerId = containerResponse.id
+                containerId = containerResponse.id
+                logger.info("Container $containerId created for Run ID: $runId")
 
                 val startTime = System.currentTimeMillis()
                 dockerClient.startContainerCmd(containerId).exec()
+                logger.debug("Container $containerId started for Run ID: $runId")
 
-                val statusCode = dockerClient.waitContainerCmd(containerId)
-                    .start()
-                    .awaitStatusCode(timeoutSeconds, TimeUnit.SECONDS)
+                val waitCallback = dockerClient.waitContainerCmd(containerId).start()
+                val statusCode = try {
+                    waitCallback.awaitStatusCode(timeoutSeconds, TimeUnit.SECONDS)
+                } catch (e: DockerClientException) {
+                    logger.warn("Error waiting for container $containerId (Run ID: $runId): ${e.message}. Attempting to get logs.")
+                    if (e.message?.contains("timed out", ignoreCase = true) == true) -2 else -3
+                } finally {
+                    waitCallback.close()
+                }
 
                 val executionTimeMs = System.currentTimeMillis() - startTime
+                logger.debug("Container $containerId (Run ID: $runId) finished with status code: $statusCode in ${executionTimeMs}ms.")
 
                 val logCallback = LogContainerCallback()
-                dockerClient.logContainerCmd(containerId)
-                    .withStdOut(true)
-                    .withStdErr(true)
-                    .withTimestamps(false)
-                    .exec(logCallback)
-                logCallback.awaitCompletion(5, TimeUnit.SECONDS)
+                try {
+                    dockerClient.logContainerCmd(containerId)
+                        .withStdOut(true)
+                        .withStdErr(true)
+                        .withTimestamps(false)
+                        .exec(logCallback)
+                        .awaitCompletion(5, TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    logger.error("Error getting logs for container $containerId (Run ID: $runId): ${e.message}", e)
+                }
 
-                dockerClient.removeContainerCmd(containerId).withForce(true).exec()
+                val errorMsg = when (statusCode) {
+                    -1 -> "Container execution status unknown (possibly not started or status retrieval failed)."
+                    -2 -> "Execution timed out after $timeoutSeconds seconds."
+                    -3 -> "Docker client error during container execution."
+                    137 -> "Execution stopped: Out of Memory (OOMKilled) or killed by SIGKILL."
+                    139 -> "Execution stopped: Segmentation fault (SIGSEGV)."
+                    else -> if (statusCode != 0 && logCallback.stderr.isNotBlank()) {
+                        "Execution failed with exit code $statusCode."
+                    } else if (statusCode != 0 && logCallback.stderr.isBlank() && logCallback.stdout.isBlank()) {
+                        "Execution failed with exit code $statusCode without specific error output."
+                    } else {
+                        null //
+                    }
+                }
 
                 return DockerExecutionResult(
                     stdout = logCallback.stdout.toString(),
                     stderr = logCallback.stderr.toString(),
                     exitCode = statusCode ?: -1,
                     executionTimeMs = executionTimeMs,
-                    error = if (statusCode == null) "Execution timed out after $timeoutSeconds seconds." else null
+                    error = errorMsg
                 )
+
             } catch (e: Exception) {
-                logger.error("Ошибка при выполнении кода в Docker для $runId: ${e.message}", e)
-                return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message}")
+                logger.error("Error during Docker code execution for Run ID $runId: ${e.message}", e)
+                return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message?.take(200)}")
             } finally {
+                containerId?.let { id ->
+                    try {
+                        dockerClient.removeContainerCmd(id).withForce(true).exec()
+                        logger.info("Container $id removed for Run ID: $runId")
+                    } catch (e: Exception) {
+                        logger.warn("Failed to remove container $id (Run ID: $runId): ${e.message}")
+                    }
+                }
+
                 try {
-                    Files.walk(tempRunDir)
-                        .sorted(Comparator.reverseOrder())
-                        .map(Path::toFile)
-                        .forEach(File::delete)
+                    if (Files.exists(tempRunDir)) {
+                        Files.walk(tempRunDir)
+                            .sorted(Comparator.reverseOrder())
+                            .map(Path::toFile)
+                            .forEach(File::delete)
+                        logger.debug("Temporary directory $tempRunDir deleted for Run ID: $runId")
+                    }
                 } catch (ioe: Exception) {
-                    logger.warn("Не удалось полностью удалить временную директорию $tempRunDir: ${ioe.message}")
+                    logger.warn("Failed to fully delete temporary directory $tempRunDir for Run ID $runId: ${ioe.message}")
                 }
             }
         } catch (e: InterruptedException) {
-            logger.warn("Ожидание разрешения на запуск Docker-контейнера было прервано.", e)
+            logger.warn("Permit acquisition for Docker container (Run ID: $runId) was interrupted.", e)
             Thread.currentThread().interrupt()
             return DockerExecutionResult("", "", -1, 0, "Container execution permit interrupted.")
         } catch (e: Exception) {
-            logger.error("Ошибка при выполнении кода в Docker: ${e.message}", e)
-            return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message}")
+            logger.error("Generic error in Docker execution (Run ID: $runId): ${e.message}", e)
+            return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message?.take(200)}")
         } finally {
             if (permitAcquired) {
                 containerExecutionPermits.release()
-                logger.debug("Разрешение на запуск Docker-контейнера освобождено. Осталось: ${containerExecutionPermits.availablePermits()}")
+                logger.debug("Execution permit released for Docker container (Run ID: $runId). Available permits: ${containerExecutionPermits.availablePermits()}")
             }
         }
     }
@@ -249,8 +326,11 @@ class LogContainerCallback : ResultCallback<Frame> {
     val stderr = StringBuilder()
     private var completed = false
     private val lock = Object()
+    private var closeable: Closeable? = null
 
-    override fun onStart(closeable: Closeable?) {}
+    override fun onStart(closeable: Closeable?) {
+        this.closeable = closeable
+    }
 
     override fun onNext(frame: Frame?) {
         frame?.let {
@@ -282,24 +362,40 @@ class LogContainerCallback : ResultCallback<Frame> {
 
     override fun onComplete() {
         synchronized(lock) {
-            completed = true
-            lock.notifyAll()
+            if (!completed) {
+                completed = true
+                lock.notifyAll()
+            }
         }
     }
 
-    override fun close() {}
+    override fun close() {
+        try {
+            closeable?.close()
+        } catch (_: Exception) {
+        }
+        onComplete()
+    }
 
     fun awaitCompletion(timeout: Long, unit: TimeUnit): Boolean {
+        val startTime = System.currentTimeMillis()
+        val timeoutMillis = unit.toMillis(timeout)
+
         synchronized(lock) {
-            if (!completed) {
+            while (!completed) {
+                val elapsedTime = System.currentTimeMillis() - startTime
+                val remainingTime = timeoutMillis - elapsedTime
+                if (remainingTime <= 0) {
+                    return false
+                }
                 try {
-                    lock.wait(unit.toMillis(timeout))
+                    lock.wait(remainingTime)
                 } catch (e: InterruptedException) {
                     Thread.currentThread().interrupt()
                     return false
                 }
             }
-            return completed
+            return true
         }
     }
 }
