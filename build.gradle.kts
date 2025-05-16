@@ -53,6 +53,8 @@ dependencies {
     implementation("com.itextpdf:kernel:9.1.0")
     implementation("com.itextpdf:html2pdf:6.1.0")
     implementation("com.itextpdf:font-asian:9.1.0")
+    implementation("com.github.docker-java:docker-java-core:3.5.1")
+    implementation("com.github.docker-java:docker-java-transport-httpclient5:3.5.1")
 }
 
 kotlin {

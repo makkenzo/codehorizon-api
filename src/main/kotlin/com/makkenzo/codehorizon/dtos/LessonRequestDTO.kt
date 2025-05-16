@@ -11,7 +11,7 @@ data class LessonRequestDTO(
     val title: String,
     var content: String,
     var codeExamples: List<String> = emptyList(),
-    var tasks: List<Task> = emptyList()
+    var tasks: MutableList<Task> = mutableListOf()
 ) {
     fun toLesson(): Lesson {
         return Lesson(

@@ -3,10 +3,7 @@ package com.makkenzo.codehorizon.services
 import com.makkenzo.codehorizon.dtos.*
 import com.makkenzo.codehorizon.events.CourseCreatedByMentorEvent
 import com.makkenzo.codehorizon.exceptions.NotFoundException
-import com.makkenzo.codehorizon.models.Course
-import com.makkenzo.codehorizon.models.CourseDifficultyLevels
-import com.makkenzo.codehorizon.models.CourseProgress
-import com.makkenzo.codehorizon.models.Lesson
+import com.makkenzo.codehorizon.models.*
 import com.makkenzo.codehorizon.repositories.CourseProgressRepository
 import com.makkenzo.codehorizon.repositories.CourseRepository
 import com.makkenzo.codehorizon.repositories.UserRepository
@@ -708,7 +705,29 @@ class CourseService(
             slug = lessonSlug,
             content = lessonDto.content,
             codeExamples = lessonDto.codeExamples ?: emptyList(),
-            tasks = lessonDto.tasks ?: emptyList(),
+            tasks = lessonDto.tasks?.map { taskDto ->
+                Task(
+                    id = taskDto.id ?: UUID.randomUUID().toString(),
+                    description = taskDto.description,
+                    solution = taskDto.solution,
+                    taskType = taskDto.taskType,
+                    options = taskDto.options?.toMutableList() ?: mutableListOf(),
+                    language = taskDto.language,
+                    boilerplateCode = taskDto.boilerplateCode,
+                    testCases = taskDto.testCases?.map { tcDto ->
+                        TestCase(
+                            id = tcDto.id ?: UUID.randomUUID().toString(),
+                            name = tcDto.name,
+                            input = tcDto.input.toMutableList(),
+                            expectedOutput = tcDto.expectedOutput.toMutableList(),
+                            isHidden = tcDto.isHidden,
+                            points = tcDto.points
+                        )
+                    }?.toMutableList() ?: mutableListOf(),
+                    timeoutSeconds = taskDto.timeoutSeconds,
+                    memoryLimitMb = taskDto.memoryLimitMb
+                )
+            }?.toMutableList() ?: mutableListOf(),
             attachments = lessonDto.attachments ?: emptyList(),
             mainAttachment = lessonDto.mainAttachment,
             videoLength = lessonDto.videoLength ?: 0.0
@@ -760,7 +779,29 @@ class CourseService(
             slug = newLessonSlug,
             content = lessonDto.content,
             codeExamples = lessonDto.codeExamples ?: existingLesson.codeExamples,
-            tasks = lessonDto.tasks ?: existingLesson.tasks,
+            tasks = lessonDto.tasks?.map { taskDto ->
+                Task(
+                    id = taskDto.id ?: UUID.randomUUID().toString(),
+                    description = taskDto.description,
+                    solution = taskDto.solution,
+                    taskType = taskDto.taskType,
+                    options = taskDto.options?.toMutableList() ?: mutableListOf(),
+                    language = taskDto.language,
+                    boilerplateCode = taskDto.boilerplateCode,
+                    testCases = taskDto.testCases?.map { tcDto ->
+                        TestCase(
+                            id = tcDto.id ?: UUID.randomUUID().toString(),
+                            name = tcDto.name,
+                            input = tcDto.input.toMutableList(),
+                            expectedOutput = tcDto.expectedOutput.toMutableList(),
+                            isHidden = tcDto.isHidden,
+                            points = tcDto.points
+                        )
+                    }?.toMutableList() ?: mutableListOf(),
+                    timeoutSeconds = taskDto.timeoutSeconds,
+                    memoryLimitMb = taskDto.memoryLimitMb
+                )
+            }?.toMutableList() ?: existingLesson.tasks,
             attachments = lessonDto.attachments ?: existingLesson.attachments,
             mainAttachment = lessonDto.mainAttachment,
             videoLength = when {

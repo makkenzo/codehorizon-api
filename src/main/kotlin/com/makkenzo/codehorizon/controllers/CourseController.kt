@@ -89,6 +89,7 @@ class CourseController(
 
     @GetMapping("/{courseId}/lessons/{lessonId}")
     @Operation(summary = "Получить лекцию по ID")
+    @PreAuthorize("@authorizationService.canReadEnrolledCourseContent(#courseId)")
     fun getLessonById(@PathVariable courseId: String, @PathVariable lessonId: String): ResponseEntity<Lesson> {
         return try {
             val lesson = courseService.getLessonById(courseId, lessonId)

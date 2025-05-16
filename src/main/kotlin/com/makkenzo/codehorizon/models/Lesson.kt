@@ -9,7 +9,7 @@ data class Lesson(
     var slug: String? = null,
     var content: String? = null,
     var codeExamples: List<String> = emptyList(),
-    var tasks: List<Task> = emptyList(),
+    var tasks: MutableList<Task> = mutableListOf(),
     var attachments: List<Attachment> = emptyList(),
     var mainAttachment: String? = null,
     var videoLength: Double? = 0.0
