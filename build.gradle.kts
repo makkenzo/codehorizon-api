@@ -30,6 +30,8 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
+    implementation("com.bucket4j:bucket4j-core:8.9.0")
+    implementation("com.bucket4j:bucket4j-redis:8.9.0")
     implementation("io.jsonwebtoken:jjwt-api:0.11.2")
     implementation("io.jsonwebtoken:jjwt-impl:0.11.2")
     implementation("io.jsonwebtoken:jjwt-jackson:0.11.2")
@@ -37,7 +39,7 @@ dependencies {
     implementation("io.minio:minio:8.3.4")
     implementation("org.thymeleaf:thymeleaf:3.1.3.RELEASE")
     implementation("ch.qos.logback:logback-classic")
-    implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
+    implementation("io.github.cdimascio:dotenv-kotlin:6.5.1")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-thymeleaf")
@@ -55,8 +57,6 @@ dependencies {
     implementation("com.itextpdf:font-asian:9.1.0")
     implementation("com.github.docker-java:docker-java-core:3.5.1")
     implementation("com.github.docker-java:docker-java-transport-httpclient5:3.5.1")
-    implementation("com.bucket4j:bucket4j-core:8.9.0")
-    implementation("com.bucket4j:bucket4j-redis:8.9.0")
 }
 
 kotlin {

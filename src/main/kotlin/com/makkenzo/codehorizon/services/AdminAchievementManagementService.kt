@@ -1,9 +1,14 @@
 package com.makkenzo.codehorizon.services
 
+import com.makkenzo.codehorizon.dtos.AdminCreateAchievementDTO
+import com.makkenzo.codehorizon.dtos.AdminUpdateAchievementDTO
+import com.makkenzo.codehorizon.dtos.PagedResponseDTO
 import com.makkenzo.codehorizon.models.Achievement
 import com.makkenzo.codehorizon.repositories.AchievementRepository
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
@@ -15,46 +20,103 @@ class AdminAchievementManagementService(
     private val achievementRepository: AchievementRepository,
     private val mongoTemplate: MongoTemplate
 ) {
-    @Cacheable("allAchievementsDefinitions")
-    fun getAllAchievements(): List<Achievement> = achievementRepository.findAll().sortedBy { it.order }
+    @Cacheable("allAchievementsList")
+    fun getAllAchievementsList(): List<Achievement> = achievementRepository.findAll().sortedBy { it.order }
 
-    fun getAchievementById(id: String): Achievement? = achievementRepository.findById(id).orElse(null)
+    @Cacheable(
+        "allAchievementsPagedDTO",
+        key = "#pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort.toString()"
+    )
+    fun getAllAchievementsPagedDTO(pageable: Pageable): PagedResponseDTO<Achievement> {
+        val page: Page<Achievement> = achievementRepository.findAll(pageable)
+        return PagedResponseDTO(
+            content = page.content,
+            pageNumber = page.number,
+            pageSize = page.size,
+            totalElements = page.totalElements,
+            totalPages = page.totalPages,
+            isLast = page.isLast
+        )
+    }
 
+    @CacheEvict(
+        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        allEntries = true
+    )
     @Transactional
-    @CacheEvict("allAchievementsDefinitions", allEntries = true)
-    fun createAchievement(achievement: Achievement): Achievement {
-        if (achievementRepository.findByKey(achievement.key) != null) {
-            throw IllegalArgumentException("Достижение с ключом '${achievement.key}' уже существует.")
+    fun createAchievement(dto: AdminCreateAchievementDTO): Achievement {
+        if (achievementRepository.findByKey(dto.key) != null) {
+            throw IllegalArgumentException("Достижение с ключом '${dto.key}' уже существует.")
         }
+
+        val achievement = Achievement(
+            key = dto.key,
+            name = dto.name,
+            description = dto.description,
+            iconUrl = dto.iconUrl,
+            triggerType = dto.triggerType,
+            triggerThreshold = dto.triggerThreshold,
+            triggerThresholdValue = dto.triggerThresholdValue,
+            xpBonus = dto.xpBonus,
+            rarity = dto.rarity,
+            isGlobal = dto.isGlobal,
+            order = dto.order,
+            category = dto.category?.trim()?.ifBlank { null },
+            isHidden = dto.isHidden,
+            prerequisites = dto.prerequisites.filter { it.isNotBlank() }.distinct()
+        )
 
         return achievementRepository.save(achievement)
     }
 
-    @Transactional
-    @CacheEvict("allAchievementsDefinitions", allEntries = true)
-    fun updateAchievement(id: String, achievementDetails: Achievement): Achievement? {
-        val existingAchievement = achievementRepository.findById(id).orElse(null) ?: return null
+    @Cacheable("allAchievementsPaged", key = "#pageable.pageNumber + '-' + #pageable.pageSize + '-' + #pageable.sort")
+    fun getAllAchievements(pageable: Pageable): Page<Achievement> {
+        return achievementRepository.findAll(pageable)
+    }
 
-        if (existingAchievement.key != achievementDetails.key && achievementRepository.findByKey(achievementDetails.key) != null) {
-            throw IllegalArgumentException("Достижение с ключом '${achievementDetails.key}' уже занято другим достижением.")
+    fun getAchievementById(id: String): Achievement? = achievementRepository.findById(id).orElse(null)
+
+    @Transactional
+    @CacheEvict(
+        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        allEntries = true
+    )
+    fun updateAchievement(id: String, dto: AdminUpdateAchievementDTO): Achievement {
+        val existingAchievement = achievementRepository.findById(id)
+            .orElseThrow { NoSuchElementException("Достижение с ID '$id' не найдено.") }
+
+        dto.key?.let { newKey ->
+            if (newKey != existingAchievement.key && achievementRepository.findByKey(newKey) != null) {
+                throw IllegalArgumentException("Достижение с ключом '$newKey' уже занято другим достижением.")
+            }
         }
 
         val updatedAchievement = existingAchievement.copy(
-            key = achievementDetails.key,
-            name = achievementDetails.name,
-            description = achievementDetails.description,
-            iconUrl = achievementDetails.iconUrl,
-            triggerType = achievementDetails.triggerType,
-            triggerThreshold = achievementDetails.triggerThreshold,
-            xpBonus = achievementDetails.xpBonus,
-            isGlobal = achievementDetails.isGlobal,
-            order = achievementDetails.order
+            key = dto.key ?: existingAchievement.key,
+            name = dto.name ?: existingAchievement.name,
+            description = dto.description ?: existingAchievement.description,
+            iconUrl = dto.iconUrl ?: existingAchievement.iconUrl,
+            triggerType = dto.triggerType ?: existingAchievement.triggerType,
+            triggerThreshold = dto.triggerThreshold ?: existingAchievement.triggerThreshold,
+            triggerThresholdValue = dto.triggerThresholdValue ?: existingAchievement.triggerThresholdValue,
+            xpBonus = dto.xpBonus ?: existingAchievement.xpBonus,
+            rarity = dto.rarity ?: existingAchievement.rarity,
+            isGlobal = dto.isGlobal ?: existingAchievement.isGlobal,
+            order = dto.order ?: existingAchievement.order,
+            category = dto.category?.trim()?.ifBlank { null } ?: existingAchievement.category,
+            isHidden = dto.isHidden ?: existingAchievement.isHidden,
+            prerequisites = dto.prerequisites?.filter { it.isNotBlank() }?.distinct()
+                ?: existingAchievement.prerequisites
         )
+
         return achievementRepository.save(updatedAchievement)
     }
 
+    @CacheEvict(
+        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        allEntries = true
+    )
     @Transactional
-    @CacheEvict("allAchievementsDefinitions", allEntries = true)
     fun deleteAchievement(id: String): Boolean {
         return if (achievementRepository.existsById(id)) {
             achievementRepository.deleteById(id)
