@@ -3,6 +3,7 @@ package com.makkenzo.codehorizon.models
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
+import java.io.Serializable
 
 enum class AchievementRarity {
     COMMON,
@@ -59,4 +60,4 @@ data class Achievement(
 
     val isHidden: Boolean = false,
     val prerequisites: List<String> = emptyList()
-)
+) : Serializable
