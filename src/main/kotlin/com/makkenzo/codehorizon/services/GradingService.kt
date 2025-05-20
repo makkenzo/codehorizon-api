@@ -20,10 +20,13 @@ class GradingService(
     private val objectMapper: ObjectMapper,
     private val dockerService: DockerService,
     @Value("classpath:runners/python_default_runner.py")
-    private val pythonRunnerResource: Resource
+    private val pythonRunnerResource: Resource,
+    @Value("classpath:runners/javascript_default_runner.js")
+    private val javascriptRunnerResource: Resource
 ) {
     private val logger = LoggerFactory.getLogger(GradingService::class.java)
     private val pythonRunnerScriptContent: String
+    private val javascriptRunnerScriptContent: String
 
     init {
         pythonRunnerScriptContent = try {
@@ -32,13 +35,17 @@ class GradingService(
             logger.error("Не удалось загрузить скрипт python_default_runner.py: ${e.message}", e)
             throw IllegalStateException("Не удалось загрузить Python runner скрипт", e)
         }
+        javascriptRunnerScriptContent = try {
+            javascriptRunnerResource.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            logger.error("Не удалось загрузить скрипт javascript_default_runner.js: ${e.message}", e)
+            throw IllegalStateException("Не удалось загрузить JavaScript runner скрипт", e)
+        }
     }
 
     @Async("taskExecutor")
     @Transactional
     fun gradeSubmission(submissionFromRequest: Submission, task: Task) {
-        logger.info("Начало проверки ответа ID: ${submissionFromRequest.id} для задачи ID: ${task.id}, тип: ${task.taskType}")
-
         var currentSubmission = submissionRepository.findById(submissionFromRequest.id!!)
             .orElse(null) ?: run {
             logger.warn("Submission with ID ${submissionFromRequest.id} not found before starting grading.")
@@ -54,7 +61,6 @@ class GradingService(
             checkedAt = Instant.now()
         )
         currentSubmission = submissionRepository.save(currentSubmission)
-
         var finalSubmissionState = currentSubmission
 
         try {
@@ -67,15 +73,35 @@ class GradingService(
                             score = 0.0,
                             checkedAt = Instant.now()
                         )
-                    } else if (task.language == ProgrammingLanguage.PYTHON) {
-                        gradePythonCode(currentSubmission, task, pythonRunnerScriptContent)
                     } else {
-                        currentSubmission.copy(
-                            status = SubmissionStatus.ERROR,
-                            feedback = "Проверка для языка ${task.language?.displayName ?: "неизвестного"} еще не реализована.",
-                            score = 0.0,
-                            checkedAt = Instant.now()
-                        )
+                        when (task.language) {
+                            ProgrammingLanguage.PYTHON -> {
+                                gradeCodeWithDocker(
+                                    currentSubmission,
+                                    task,
+                                    pythonRunnerScriptContent,
+                                    ProgrammingLanguage.PYTHON
+                                )
+                            }
+
+                            ProgrammingLanguage.JAVASCRIPT -> {
+                                gradeCodeWithDocker(
+                                    currentSubmission,
+                                    task,
+                                    javascriptRunnerScriptContent,
+                                    ProgrammingLanguage.JAVASCRIPT
+                                )
+                            }
+
+                            else -> {
+                                currentSubmission.copy(
+                                    status = SubmissionStatus.ERROR,
+                                    feedback = "Проверка для языка ${task.language?.displayName ?: "неизвестного"} еще не реализована.",
+                                    score = 0.0,
+                                    checkedAt = Instant.now()
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -104,11 +130,6 @@ class GradingService(
 
             finalSubmissionState = submissionRepository.save(finalSubmissionState)
             logger.info("Grading for submission ID: ${submissionFromRequest.id} completed with status: ${finalSubmissionState.status}, score: ${finalSubmissionState.score}")
-
-            if (finalSubmissionState.status == SubmissionStatus.CORRECT) {
-                // Проверка, не завершил ли пользователь урок/курс этим ответом
-            }
-
         } catch (e: Exception) {
             logger.error(
                 "Critical error during grading submission ID: ${submissionFromRequest.id}. Task ID: ${task.id}",
@@ -124,7 +145,12 @@ class GradingService(
         }
     }
 
-    private fun gradePythonCode(submission: Submission, task: Task, testRunnerScriptContent: String): Submission {
+    private fun gradeCodeWithDocker(
+        submission: Submission,
+        task: Task,
+        runnerScriptContent: String,
+        language: ProgrammingLanguage
+    ): Submission {
         val studentCode = submission.answerCode ?: return submission.copy(
             status = SubmissionStatus.ERROR,
             feedback = "Код ответа отсутствует.",
@@ -141,7 +167,10 @@ class GradingService(
                 )
             })
         } catch (e: Exception) {
-            logger.error("Ошибка сериализации тест-кейсов для задачи ${task.id}: ${e.message}", e)
+            logger.error(
+                "Ошибка сериализации тест-кейсов для задачи ${task.id} (язык: ${language.displayName}): ${e.message}",
+                e
+            )
             return submission.copy(
                 status = SubmissionStatus.ERROR,
                 feedback = "Ошибка подготовки тестовых данных.",
@@ -150,10 +179,31 @@ class GradingService(
             )
         }
 
-        val dockerResult = dockerService.executePythonCode(
-            studentCode = studentCode,
-            testRunnerScript = testRunnerScriptContent,
+        val dockerImageName = when (language) {
+            ProgrammingLanguage.PYTHON -> "codehorizon-python-runner:latest"
+            ProgrammingLanguage.JAVASCRIPT -> "codehorizon-javascript-runner:latest"
+        }
+        val mainCodeFileName = when (language) {
+            ProgrammingLanguage.PYTHON -> "student_code.py"
+            ProgrammingLanguage.JAVASCRIPT -> "student_code.js"
+        }
+        val runnerFileName = when (language) {
+            ProgrammingLanguage.PYTHON -> "run_tests.py"
+            ProgrammingLanguage.JAVASCRIPT -> "run_tests.js"
+        }
+        val commandToRun = when (language) {
+            ProgrammingLanguage.PYTHON -> listOf("python", runnerFileName)
+            ProgrammingLanguage.JAVASCRIPT -> listOf("node", runnerFileName)
+        }
+
+        val dockerResult = dockerService.executeCodeInContainer(
+            imageName = dockerImageName,
+            studentCodeContent = studentCode,
+            studentCodeFileName = mainCodeFileName,
+            testRunnerScriptContent = runnerScriptContent,
+            testRunnerFileName = runnerFileName,
             testCasesJsonContent = testCasesJson,
+            command = commandToRun,
             timeoutSeconds = task.timeoutSeconds ?: 10L,
             memoryLimitMb = task.memoryLimitMb ?: 128L
         )

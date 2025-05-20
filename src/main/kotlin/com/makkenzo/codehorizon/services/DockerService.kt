@@ -33,6 +33,7 @@ class DockerService {
     private val dockerClient: DockerClient
 
     private val pythonImageName = "codehorizon-python-runner:latest"
+    private val javascriptImageName = "codehorizon-javascript-runner:latest"
     private val baseTempDir = Paths.get(System.getProperty("java.io.tmpdir"), "codehorizon_runner")
 
     private val maxConcurrentContainers = 5
@@ -54,7 +55,9 @@ class DockerService {
         }
 
         ensureDockerAvailable()
-        buildPythonImageIfNotExists()
+
+        buildImageIfNotExists(pythonImageName, "docker/python-runner.Dockerfile")
+        buildImageIfNotExists(javascriptImageName, "docker/javascript-runner.Dockerfile")
     }
 
     private fun ensureDockerAvailable() {
@@ -67,74 +70,72 @@ class DockerService {
         }
     }
 
-    private fun buildPythonImageIfNotExists() {
+    private fun buildImageIfNotExists(imageName: String, dockerfileRelativePath: String) {
         try {
-            logger.info("--- Checking/Building Docker image: $pythonImageName ---")
-            val existingImage = dockerClient.listImagesCmd().withImageNameFilter(pythonImageName).exec()
+            logger.info("--- Checking/Building Docker image: $imageName ---")
+            val existingImage = dockerClient.listImagesCmd().withImageNameFilter(imageName).exec()
 
             if (existingImage.isNotEmpty()) {
-                logger.info("Docker image $pythonImageName found locally (ID: ${existingImage.first().id.take(12)}). Skipping build.")
-                logger.info("--- Docker image check for $pythonImageName complete ---")
+                logger.info("Docker image $imageName found locally (ID: ${existingImage.first().id.take(12)}). Skipping build.")
+                logger.info("--- Docker image check for $imageName complete ---")
                 return
             }
 
-            logger.info("Docker image $pythonImageName NOT FOUND locally. Starting build...")
+            logger.info("Docker image $imageName NOT FOUND locally. Starting build...")
 
-            val dockerfileRelativePath = "docker/python-runner.Dockerfile"
-            val dockerContextPath = Paths.get(dockerfileRelativePath).parent?.toFile()
-                ?: Paths.get(".").toFile()
-            val dockerfile = dockerContextPath.resolve("python-runner.Dockerfile")
+            val dockerfile = File(dockerfileRelativePath)
+            val dockerContextPath = dockerfile.parentFile ?: File(".")
 
             if (!dockerfile.exists()) {
                 logger.error("Dockerfile not found at path: ${dockerfile.absolutePath}")
-                throw IllegalStateException("Dockerfile not found for Python runner at ${dockerfile.absolutePath}")
+                throw IllegalStateException("Dockerfile not found for $imageName at ${dockerfile.absolutePath}")
             }
             logger.info("Using Dockerfile: ${dockerfile.absolutePath}, Context: ${dockerContextPath.absolutePath}")
 
 
             val buildCallbackLog = object : BuildImageResultCallback() {
                 override fun onNext(item: BuildResponseItem?) {
-                    item?.stream?.trim()?.let { logMsg -> if (logMsg.isNotEmpty()) logger.info("Build log: $logMsg") }
+                    item?.stream?.trim()
+                        ?.let { logMsg -> if (logMsg.isNotEmpty()) logger.info("Build log ($imageName): $logMsg") }
                     item?.progressDetail?.let { progress ->
-                        logger.debug("Build progress: current=${progress.current}, total=${progress.total}")
+                        logger.debug("Build progress ($imageName): current=${progress.current}, total=${progress.total}")
                     }
                     item?.errorDetail?.let { error ->
-                        logger.error("Build error detail: ${error.code} - ${error.message}")
+                        logger.error("Build error detail ($imageName): ${error.code} - ${error.message}")
                     }
                     super.onNext(item)
                 }
 
                 override fun onError(throwable: Throwable?) {
-                    logger.error("Build process error: ", throwable)
+                    logger.error("Build process error ($imageName): ", throwable)
                     super.onError(throwable)
                 }
 
                 override fun onComplete() {
-                    logger.info("BuildImageResultCallback onComplete triggered for $pythonImageName.")
+                    logger.info("BuildImageResultCallback onComplete triggered for $imageName.")
                     super.onComplete()
                 }
             }
 
             try {
                 dockerClient.buildImageCmd(dockerfile)
-                    .withTags(setOf(pythonImageName))
-                    .withDockerfile(dockerfile)
+                    .withTags(setOf(imageName))
+                    // .withDockerfile(dockerfile) // Dockerfile уже указан в buildImageCmd(File)
                     .withPull(true)
                     .exec(buildCallbackLog)
-                    .awaitCompletion()
+                    .awaitCompletion(5, TimeUnit.MINUTES)
             } catch (e: Exception) {
-                logger.error("Exception during buildImageCmd execution for $pythonImageName: ${e.message}", e)
-                throw IllegalStateException("Failed to build Docker image $pythonImageName due to: ${e.message}", e)
+                logger.error("Exception during buildImageCmd execution for $imageName: ${e.message}", e)
+                throw IllegalStateException("Failed to build Docker image $imageName due to: ${e.message}", e)
             }
 
-
-            val imagesAfterBuild = dockerClient.listImagesCmd().withImageNameFilter(pythonImageName).exec()
+            val imagesAfterBuild = dockerClient.listImagesCmd().withImageNameFilter(imageName).exec()
             if (imagesAfterBuild.isEmpty()) {
-                logger.error("!!! Docker image $pythonImageName did NOT appear after build attempt !!! Check build logs above.")
-                throw IllegalStateException("Docker image $pythonImageName could not be built or found after build attempt.")
+                logger.error("!!! Docker image $imageName did NOT appear after build attempt !!! Check build logs above.")
+                throw IllegalStateException("Docker image $imageName could not be built or found after build attempt.")
             } else {
                 logger.info(
-                    "Docker image $pythonImageName successfully built/verified (ID: ${
+                    "Docker image $imageName successfully built/verified (ID: ${
                         imagesAfterBuild.first().id.take(
                             12
                         )
@@ -142,20 +143,24 @@ class DockerService {
                 )
             }
 
-            logger.info("--- Docker image build for $pythonImageName complete ---")
+            logger.info("--- Docker image build for $imageName complete ---")
         } catch (e: DockerClientException) {
-            logger.error("Docker client error during image build/check for $pythonImageName: ${e.message}", e)
-            throw IllegalStateException("Docker client error for $pythonImageName: ${e.message}", e)
+            logger.error("Docker client error during image build/check for $imageName: ${e.message}", e)
+            throw IllegalStateException("Docker client error for $imageName: ${e.message}", e)
         } catch (e: Exception) {
-            logger.error("Critical error during Docker image build/check for $pythonImageName: ${e.message}", e)
-            throw IllegalStateException("Failed to ensure Python runner Docker image $pythonImageName is available", e)
+            logger.error("Critical error during Docker image build/check for $imageName: ${e.message}", e)
+            throw IllegalStateException("Failed to ensure Docker image $imageName is available", e)
         }
     }
 
-    fun executePythonCode(
-        studentCode: String,
-        testRunnerScript: String,
+    fun executeCodeInContainer(
+        imageName: String,
+        studentCodeContent: String,
+        studentCodeFileName: String,
+        testRunnerScriptContent: String,
+        testRunnerFileName: String,
         testCasesJsonContent: String,
+        command: List<String>,
         timeoutSeconds: Long = 10,
         memoryLimitMb: Long = 128,
         cpuQuotaMicroseconds: Long = 50000
@@ -166,14 +171,11 @@ class DockerService {
 
         try {
             if (!containerExecutionPermits.tryAcquire(timeoutSeconds + 5, TimeUnit.SECONDS)) {
-                logger.warn("Timeout acquiring execution permit for Docker container (Run ID: $runId). Max permits: $maxConcurrentContainers. Queue may be full or Docker is busy.")
-                return DockerExecutionResult(
-                    "", "", -1, 0,
-                    "Execution permit not acquired; server busy. Please try again later."
-                )
+                logger.warn("Timeout acquiring execution permit for Docker container (Run ID: $runId, Image: $imageName).")
+                return DockerExecutionResult("", "", -1, 0, "Execution permit not acquired; server busy.")
             }
             permitAcquired = true
-            logger.debug("Execution permit acquired for Docker container (Run ID: $runId). Available permits: ${containerExecutionPermits.availablePermits()}")
+            logger.debug("Execution permit acquired for Docker container (Run ID: $runId, Image: $imageName). Available: ${containerExecutionPermits.availablePermits()}")
 
             Files.createDirectories(tempRunDir)
             val hostPath = tempRunDir.absolutePathString()
@@ -183,25 +185,22 @@ class DockerService {
 
             try {
                 Files.writeString(
-                    tempRunDir.resolve("student_code.py"),
-                    studentCode,
+                    tempRunDir.resolve(studentCodeFileName),
+                    studentCodeContent,
                     StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
                 )
                 Files.writeString(
-                    tempRunDir.resolve("run_tests.py"),
-                    testRunnerScript,
+                    tempRunDir.resolve(testRunnerFileName),
+                    testRunnerScriptContent,
                     StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
                 )
                 Files.writeString(
                     tempRunDir.resolve("test_data.json"),
                     testCasesJsonContent,
                     StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
                 )
 
                 val hostConfig = HostConfig.newHostConfig()
@@ -216,17 +215,18 @@ class DockerService {
                     .withPidsLimit(64L)
                     .withReadonlyRootfs(true)
 
-                val containerResponse: CreateContainerResponse = dockerClient.createContainerCmd(pythonImageName)
+                val containerResponse: CreateContainerResponse = dockerClient.createContainerCmd(imageName)
                     .withHostConfig(hostConfig)
                     .withWorkingDir(containerPath)
-                    .withCmd("python", "run_tests.py")
+                    .withCmd(command)
                     .withAttachStdout(true)
                     .withAttachStderr(true)
                     .withUser("appuser")
                     .withEnv("PYTHONUNBUFFERED=1")
                     .exec()
+
                 containerId = containerResponse.id
-                logger.info("Container $containerId created for Run ID: $runId")
+                logger.info("Container $containerId created for Run ID: $runId (Image: $imageName)")
 
                 val startTime = System.currentTimeMillis()
                 dockerClient.startContainerCmd(containerId).exec()
@@ -237,7 +237,8 @@ class DockerService {
                     waitCallback.awaitStatusCode(timeoutSeconds, TimeUnit.SECONDS)
                 } catch (e: DockerClientException) {
                     logger.warn("Error waiting for container $containerId (Run ID: $runId): ${e.message}. Attempting to get logs.")
-                    if (e.message?.contains("timed out", ignoreCase = true) == true) -2 else -3
+                    if (e.message?.contains("timed out", ignoreCase = true) == true) -2
+                    else -3
                 } finally {
                     waitCallback.close()
                 }
@@ -263,13 +264,11 @@ class DockerService {
                     -3 -> "Docker client error during container execution."
                     137 -> "Execution stopped: Out of Memory (OOMKilled) or killed by SIGKILL."
                     139 -> "Execution stopped: Segmentation fault (SIGSEGV)."
-                    else -> if (statusCode != 0 && logCallback.stderr.isNotBlank()) {
+                    else -> if (statusCode != 0 && logCallback.stderr.isNotBlank() && logCallback.stdout.isNotBlank()) {
                         "Execution failed with exit code $statusCode."
                     } else if (statusCode != 0 && logCallback.stderr.isBlank() && logCallback.stdout.isBlank()) {
                         "Execution failed with exit code $statusCode without specific error output."
-                    } else {
-                        null //
-                    }
+                    } else null
                 }
 
                 return DockerExecutionResult(
@@ -279,9 +278,11 @@ class DockerService {
                     executionTimeMs = executionTimeMs,
                     error = errorMsg
                 )
-
             } catch (e: Exception) {
-                logger.error("Error during Docker code execution for Run ID $runId: ${e.message}", e)
+                logger.error(
+                    "Error during Docker code execution for Run ID $runId (Image: $imageName): ${e.message}",
+                    e
+                )
                 return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message?.take(200)}")
             } finally {
                 containerId?.let { id ->
@@ -299,23 +300,25 @@ class DockerService {
                             .sorted(Comparator.reverseOrder())
                             .map(Path::toFile)
                             .forEach(File::delete)
-                        logger.debug("Temporary directory $tempRunDir deleted for Run ID: $runId")
                     }
                 } catch (ioe: Exception) {
                     logger.warn("Failed to fully delete temporary directory $tempRunDir for Run ID $runId: ${ioe.message}")
                 }
             }
         } catch (e: InterruptedException) {
-            logger.warn("Permit acquisition for Docker container (Run ID: $runId) was interrupted.", e)
+            logger.warn(
+                "Permit acquisition for Docker container (Run ID: $runId, Image: $imageName) was interrupted.",
+                e
+            )
             Thread.currentThread().interrupt()
             return DockerExecutionResult("", "", -1, 0, "Container execution permit interrupted.")
         } catch (e: Exception) {
-            logger.error("Generic error in Docker execution (Run ID: $runId): ${e.message}", e)
+            logger.error("Generic error in Docker execution (Run ID: $runId, Image: $imageName): ${e.message}", e)
             return DockerExecutionResult("", "", -1, 0, "Docker execution failed: ${e.message?.take(200)}")
         } finally {
             if (permitAcquired) {
                 containerExecutionPermits.release()
-                logger.debug("Execution permit released for Docker container (Run ID: $runId). Available permits: ${containerExecutionPermits.availablePermits()}")
+                logger.debug("Execution permit released for Docker container (Run ID: $runId, Image: $imageName). Available: ${containerExecutionPermits.availablePermits()}")
             }
         }
     }

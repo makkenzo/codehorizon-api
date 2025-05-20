@@ -1,7 +1,8 @@
 package com.makkenzo.codehorizon.models
 
 enum class ProgrammingLanguage(val displayName: String, val fileExtension: String) {
-    PYTHON("Python", ".py");
+    PYTHON("Python", ".py"),
+    JAVASCRIPT("JavaScript", ".js");
 
     companion object {
         fun fromString(s: String?): ProgrammingLanguage? {
