@@ -19,6 +19,7 @@ import org.springframework.data.mongodb.core.aggregation.Aggregation.*
 import org.springframework.data.mongodb.core.aggregation.ConvertOperators
 import org.springframework.data.mongodb.core.aggregation.LookupOperation
 import org.springframework.data.mongodb.core.query.Criteria
+import org.springframework.data.mongodb.core.query.Query
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -155,15 +156,29 @@ class UserService(
 
     fun findAllUsersAdmin(pageable: Pageable): PagedResponseDTO<AdminUserDTO> {
         val userPage = userRepository.findAll(pageable)
+        val userIds = userPage.content.mapNotNull { it.id }
+
+        val profilesMap: Map<String, Profile> = if (userIds.isNotEmpty()) {
+            val profileQuery = Query(Criteria.where("userId").`in`(userIds))
+            mongoTemplate.find(profileQuery, Profile::class.java).associateBy { it.userId }
+        } else {
+            emptyMap()
+        }
+
         val userDTOs = userPage.content.map { user ->
+            val profile = profilesMap[user.id!!]
             AdminUserDTO(
                 id = user.id!!,
                 username = user.username,
                 email = user.email,
                 isVerified = user.isVerified,
-                roles = user.roles
+                roles = user.roles,
+                imageUrl = profile?.avatarUrl,
+                createdAt = user.createdAt,
+                lastLoginDate = user.lastLoginDate
             )
         }
+
         return PagedResponseDTO(
             content = userDTOs,
             pageNumber = userPage.number,
@@ -177,12 +192,18 @@ class UserService(
     fun getUserByIdForAdmin(id: String): AdminUserDTO {
         val user = userRepository.findById(id)
             .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден") }
+
+        val profile = profileRepository.findByUserId(user.id!!)
+
         return AdminUserDTO(
             id = user.id!!,
             username = user.username,
             email = user.email,
             isVerified = user.isVerified,
-            roles = user.roles
+            roles = user.roles,
+            imageUrl = profile?.avatarUrl,
+            createdAt = user.createdAt,
+            lastLoginDate = user.lastLoginDate
         )
     }
 
@@ -219,13 +240,17 @@ class UserService(
         )
 
         val savedUser = userRepository.save(updatedUser)
+        val userProfile = profileService.getProfileByUserId(user.id!!)
 
         return AdminUserDTO(
             id = savedUser.id!!,
             username = savedUser.username,
             email = savedUser.email,
             isVerified = savedUser.isVerified,
-            roles = savedUser.roles
+            roles = savedUser.roles,
+            imageUrl = userProfile.avatarUrl,
+            createdAt = savedUser.createdAt,
+            lastLoginDate = savedUser.lastLoginDate
         )
     }
 
