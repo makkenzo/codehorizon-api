@@ -28,6 +28,12 @@ class GradingService(
     private val pythonRunnerScriptContent: String
     private val javascriptRunnerScriptContent: String
 
+    companion object {
+        private const val MAX_ERROR_MESSAGE_LENGTH = 2048
+        private const val MAX_STDOUT_STDERR_LENGTH = 2000
+        private const val MAX_COMPILE_ERROR_LENGTH = 1000
+    }
+
     init {
         pythonRunnerScriptContent = try {
             pythonRunnerResource.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
@@ -212,7 +218,8 @@ class GradingService(
         var overallScore = 0.0
         var feedbackMessage = dockerResult.error ?: "Проверка завершена."
         val parsedTestResults = mutableListOf<TestRunResult>()
-        var compileError: String? = null
+        var compileErrorFromJson: String? = null
+        var runnerErrorFromJson: String? = null
 
         if (dockerResult.error != null) {
             overallStatus = when {
@@ -235,10 +242,10 @@ class GradingService(
                     )
                 )
             }
-        } else if (dockerResult.exitCode != 0 && dockerResult.stderr.isNotBlank() && dockerResult.stdout.isBlank()) {
+        } else if (dockerResult.exitCode != 0 && dockerResult.stdout.isBlank() && dockerResult.stderr.isNotBlank()) {
             overallStatus = SubmissionStatus.ERROR
-            compileError = dockerResult.stderr.take(1000)
-            feedbackMessage = "Ошибка выполнения кода: ${compileError}"
+            compileErrorFromJson = dockerResult.stderr.take(MAX_ERROR_MESSAGE_LENGTH)
+            feedbackMessage = "Ошибка выполнения кода: ${compileErrorFromJson}"
             task.testCases.forEach { tc ->
                 parsedTestResults.add(
                     TestRunResult(
@@ -247,7 +254,7 @@ class GradingService(
                         passed = false,
                         actualOutput = null,
                         expectedOutput = tc.expectedOutput,
-                        errorMessage = compileError,
+                        errorMessage = compileErrorFromJson,
                         executionTimeMs = 0
                     )
                 )
@@ -257,13 +264,14 @@ class GradingService(
                 val typeRef = object : TypeReference<Map<String, Any?>>() {}
                 val fullOutputJson = objectMapper.readValue(dockerResult.stdout, typeRef)
 
-                compileError = fullOutputJson["compile_error"] as? String
+                compileErrorFromJson = fullOutputJson["compile_error"] as? String
+                runnerErrorFromJson = fullOutputJson["runner_error"] as? String
                 @Suppress("UNCHECKED_CAST")
                 val testResultsList = fullOutputJson["test_results"] as? List<Map<String, Any?>>
 
-                if (compileError != null) {
+                if (compileErrorFromJson != null) {
                     overallStatus = SubmissionStatus.ERROR
-                    feedbackMessage = "Ошибка компиляции/импорта: $compileError"
+                    feedbackMessage = "Ошибка в системе проверки: $runnerErrorFromJson"
                     task.testCases.forEach { tc ->
                         parsedTestResults.add(
                             TestRunResult(
@@ -272,7 +280,7 @@ class GradingService(
                                 passed = false,
                                 actualOutput = null,
                                 expectedOutput = tc.expectedOutput,
-                                errorMessage = compileError,
+                                errorMessage = compileErrorFromJson,
                                 executionTimeMs = 0
                             )
                         )
@@ -301,7 +309,10 @@ class GradingService(
                                 passed = passed,
                                 actualOutput = resMap["actualOutput"] as? List<String>,
                                 expectedOutput = resMap["expectedOutput"] as? List<String>,
-                                errorMessage = resMap["errorMessage"] as? String,
+                                errorMessage = (resMap["errorMessage"] as? String)?.substring(
+                                    0,
+                                    MAX_ERROR_MESSAGE_LENGTH.coerceAtMost((resMap["errorMessage"] as String).length)
+                                ),
                                 executionTimeMs = (resMap["executionTimeMs"] as? Number)?.toLong()
                             )
                         )
@@ -323,20 +334,19 @@ class GradingService(
                         feedbackMessage = "Код выполнен без ошибок (тест-кейсы отсутствуют)."
                     }
                 } else {
-                    feedbackMessage = "Не удалось разобрать результаты тестов из вывода Docker (stdout)."
-                    logger.warn("Invalid JSON from Docker stdout: ${dockerResult.stdout.take(500)}")
+                    feedbackMessage = "Не удалось разобрать результаты тестов из вывода Docker (некорректный JSON)."
+                    logger.warn("Invalid JSON structure from Docker stdout: ${dockerResult.stdout.take(500)}")
                     overallStatus = SubmissionStatus.ERROR
                 }
             } catch (e: Exception) {
                 logger.error(
-                    "Error parsing JSON results from Docker: ${e.message}. Stdout: ${dockerResult.stdout.take(500)}, Stderr: ${
-                        dockerResult.stderr.take(
+                    "Error parsing JSON results from Docker: ${e.message}. Stdout: ${
+                        dockerResult.stdout.take(
                             500
                         )
-                    }",
-                    e
+                    }, Stderr: ${dockerResult.stderr.take(500)}", e
                 )
-                feedbackMessage = "Ошибка обработки результатов проверки."
+                feedbackMessage = "Ошибка обработки результатов проверки (невалидный JSON)."
                 overallStatus = SubmissionStatus.ERROR
             }
         }
@@ -347,7 +357,9 @@ class GradingService(
             feedback = feedbackMessage,
             stdout = dockerResult.stdout.take(2000),
             stderr = dockerResult.stderr.take(2000),
-            compileErrorMessage = compileError?.take(1000),
+            compileErrorMessage = compileErrorFromJson?.take(MAX_ERROR_MESSAGE_LENGTH)
+                ?: dockerResult.stderr.takeIf { dockerResult.stdout.isBlank() && dockerResult.exitCode != 0 }
+                    ?.take(MAX_ERROR_MESSAGE_LENGTH),
             testRunResults = parsedTestResults,
             checkedAt = Instant.now()
         )

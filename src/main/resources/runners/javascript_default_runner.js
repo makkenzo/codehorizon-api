@@ -2,107 +2,196 @@ const fs = require('fs');
 const vm = require('vm');
 const process = require('process');
 const { performance } = require('perf_hooks');
+const util = require('util');
 
-let studentCodeError = null;
-let mainFunctionInstance = null;
+const STUDENT_CODE_FILE = './student_code.js';
+const TEST_DATA_FILE = 'test_data.json';
+const MAX_OUTPUT_LINES = 100;
+const MAX_OUTPUT_LINE_LENGTH = 1024;
+const MAX_ERROR_MESSAGE_LENGTH = 2048;
+
+let compileOrImportError = null;
+let studentMainFunction = null;
 
 try {
-    const studentCodeContent = fs.readFileSync('./student_code.js', 'utf8');
-    const script = new vm.Script(studentCodeContent + '\\nmodule.exports = { main_function };');
-    const context = {
-        module: { exports: {} },
-        require: require,
-        console: console,
-        process: process,
-    };
-    vm.createContext(context);
-    script.runInContext(context);
-    mainFunctionInstance = context.module.exports.main_function;
+    const studentCodeContent = fs.readFileSync(STUDENT_CODE_FILE, 'utf8');
 
-    if (typeof mainFunctionInstance !== 'function') {
-        studentCodeError = 'main_function is not a function or not exported from student_code.js.';
-        mainFunctionInstance = null;
-    }
+    const studentScript = new vm.Script(
+        `
+        let exports = {};
+        ${studentCodeContent}
+        if (typeof main_function !== 'function') {
+            throw new Error("main_function is not defined or not a function in your code.");
+        }
+        exports.main_function = main_function;
+        exports; 
+    `,
+        { filename: STUDENT_CODE_FILE }
+    );
+
+    const tempContext = vm.createContext({
+        require: require,
+        console: { ...console },
+        process: {
+            stdout: process.stdout,
+            stderr: process.stderr,
+            argv: [],
+            env: {},
+            cwd: () => '/usr/src/app',
+        },
+
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        Buffer,
+        Math,
+        JSON,
+        Date,
+        RegExp,
+        Array,
+        Object,
+        String,
+        Number,
+        Boolean,
+        Symbol,
+        Map,
+        Set,
+        WeakMap,
+        WeakSet,
+        Promise,
+    });
+    const scriptExports = studentScript.runInContext(tempContext, { timeout: 5000 });
+    studentMainFunction = scriptExports.main_function;
 } catch (e) {
-    studentCodeError = `Error during import/evaluation of student_code.js: ${e.name}: ${e.message}`;
-    if (e.stack) {
-        studentCodeError += `\\nStack: ${e.stack}`;
-    }
+    compileOrImportError = `Error loading/compiling student code: ${e.name}: ${e.message}\n${e.stack || ''}`.substring(
+        0,
+        MAX_ERROR_MESSAGE_LENGTH
+    );
+    studentMainFunction = null;
 }
 
-function runTestCase(testCaseData, studentFunc) {
-    if (studentCodeError) {
+async function runSingleTestCase(testCaseData, studentFuncRef) {
+    if (compileOrImportError) {
         return {
             testCaseId: testCaseData.id,
             testCaseName: testCaseData.name,
             passed: false,
             actualOutput: null,
             expectedOutput: testCaseData.expected_output || [],
-            errorMessage: studentCodeError,
+            errorMessage: compileOrImportError,
             executionTimeMs: 0,
         };
     }
-    if (typeof studentFunc !== 'function') {
+
+    if (typeof studentFuncRef !== 'function') {
         return {
             testCaseId: testCaseData.id,
             testCaseName: testCaseData.name,
             passed: false,
             actualOutput: null,
             expectedOutput: testCaseData.expected_output || [],
-            errorMessage: "Student's main_function is not available.",
+            errorMessage: "Student's main_function is not available (compilation or definition error).",
             executionTimeMs: 0,
         };
     }
 
-    let capturedOutputLines = [];
-    let capturedErrorLines = [];
+    const capturedConsoleOutput = [];
+    let returnedValue = undefined;
+    let errorMessage = null;
+    let executionTimeMs = 0;
 
-    const originalConsoleLog = console.log;
-    console.log = (...args) => {
-        const line = args
-            .map((arg) => {
-                if (typeof arg === 'object' && arg !== null) {
-                    try {
-                        return JSON.stringify(arg);
-                    } catch (e) {
-                        return String(arg);
-                    }
+    const sandbox = {
+        console: {
+            log: (...args) => {
+                if (capturedConsoleOutput.length < MAX_OUTPUT_LINES) {
+                    const line = args
+                        .map((arg) => util.format(arg))
+                        .join(' ')
+                        .substring(0, MAX_OUTPUT_LINE_LENGTH);
+                    capturedConsoleOutput.push(line);
                 }
-                return String(arg);
-            })
-            .join(' ');
-        capturedOutputLines.push(line);
+            },
+        },
+        require: (moduleName) => {
+            return require(moduleName);
+        },
+
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
+        Buffer,
+        Math,
+        JSON,
+        Date,
+        RegExp,
+        Array,
+        Object,
+        String,
+        Number,
+        Boolean,
+        Symbol,
+        Map,
+        Set,
+        WeakMap,
+        WeakSet,
+        Promise,
     };
+    vm.createContext(sandbox);
 
-    let actualOutputsList = [];
-    let errorMsg = null;
-    const startTimeTc = performance.now();
-
+    const startTime = performance.now();
     try {
         const tcInput = testCaseData.input || [];
 
-        studentFunc(tcInput);
+        const codeToRunInSandbox = `
+            (${studentFuncRef.toString()})(${JSON.stringify(tcInput)});
+        `;
 
-        actualOutputsList = [...capturedOutputLines];
-    } catch (eRuntime) {
-        errorMsg = `${eRuntime.name}: ${eRuntime.message}`;
-        if (eRuntime.stack) {
-            errorMsg += `\\nStack: ${eRuntime.stack}`;
+        const resultPromiseOrValue = vm.runInContext(codeToRunInSandbox, sandbox, {
+            timeout: (testCaseData.timeoutSeconds || 5) * 1000,
+            displayErrors: true,
+        });
+
+        if (resultPromiseOrValue && typeof resultPromiseOrValue.then === 'function') {
+            returnedValue = await resultPromiseOrValue;
+        } else {
+            returnedValue = resultPromiseOrValue;
         }
+    } catch (e) {
+        errorMessage = `Runtime error: ${e.name}: ${e.message}\n${e.stack || ''}`.substring(
+            0,
+            MAX_ERROR_MESSAGE_LENGTH
+        );
     } finally {
-        console.log = originalConsoleLog;
-        capturedOutputLines = [];
+        executionTimeMs = Math.round(performance.now() - startTime);
     }
 
-    const executionTimeTcMs = performance.now() - startTimeTc;
+    let actualOutputToCompare;
+
+    if (returnedValue !== undefined) {
+        if (Array.isArray(returnedValue) && returnedValue.length > 0) {
+            actualOutputToCompare = returnedValue.map((item) => String(item).trim());
+        } else if (!Array.isArray(returnedValue)) {
+            actualOutputToCompare = [String(returnedValue).trim()];
+        } else {
+            actualOutputToCompare = capturedConsoleOutput.map((line) => line.trim());
+        }
+    } else {
+        actualOutputToCompare = capturedConsoleOutput.map((line) => line.trim());
+    }
+
+    if (actualOutputToCompare.length === 0 && capturedConsoleOutput.length === 0 && returnedValue === undefined) {
+        actualOutputToCompare = [];
+    }
 
     let isPassed = false;
-    const expectedTcOutput = testCaseData.expected_output || [];
+    const expectedOutput = testCaseData.expected_output || [];
 
-    if (errorMsg === null) {
-        if (actualOutputsList.length === expectedTcOutput.length) {
-            isPassed = actualOutputsList.every((ao, i) => String(ao).trim() === String(expectedTcOutput[i]).trim());
-        } else if (actualOutputsList.length === 0 && expectedTcOutput.length === 0) {
+    if (!errorMessage) {
+        if (actualOutputToCompare.length === expectedOutput.length) {
+            isPassed = actualOutputToCompare.every((ao, i) => String(ao).trim() === String(expectedOutput[i]).trim());
+        } else if (actualOutputToCompare.length === 0 && expectedOutput.length === 0) {
             isPassed = true;
         }
     }
@@ -111,66 +200,75 @@ function runTestCase(testCaseData, studentFunc) {
         testCaseId: testCaseData.id,
         testCaseName: testCaseData.name,
         passed: isPassed,
-        actualOutput: actualOutputsList.length > 0 ? actualOutputsList : null,
-        expectedOutput: expectedTcOutput.length > 0 ? expectedTcOutput : null,
-        errorMessage: errorMsg,
-        executionTimeMs: Math.round(executionTimeTcMs),
+        actualOutput: actualOutputToCompare.length > 0 ? actualOutputToCompare : null,
+        expectedOutput: expectedOutput.length > 0 ? expectedOutput : null,
+        errorMessage: errorMessage,
+        executionTimeMs: executionTimeMs,
     };
 }
 
-if (require.main === module) {
-    const allResults = [];
-    let compileErrorOutput = null;
+async function main() {
+    const allTestResults = [];
+    let overallErrorMessage = null;
 
-    if (studentCodeError) {
-        compileErrorOutput = studentCodeError;
-
+    if (compileOrImportError) {
         try {
-            const initialTestCasesContent = fs.readFileSync('test_data.json', 'utf8');
-            const initialTestCases = JSON.parse(initialTestCasesContent);
-            for (const tcInit of initialTestCases) {
-                allResults.push(runTestCase(tcInit, null));
+            const testCasesContent = fs.readFileSync(TEST_DATA_FILE, 'utf8');
+            const testCases = JSON.parse(testCasesContent);
+            for (const tc of testCases) {
+                allTestResults.push(await runSingleTestCase(tc, null));
             }
-        } catch (eSetupFail) {
-            allResults.push({
-                testCaseId: 'setup_failure',
-                testCaseName: 'Setup Failure',
-                passed: false,
-                errorMessage: `Critical error reading tests during import fail: ${eSetupFail.message}`,
-                executionTimeMs: 0,
-            });
+        } catch (e) {
+            overallErrorMessage =
+                `Failed to load test data after student code compilation error: ${e.message}`.substring(
+                    0,
+                    MAX_ERROR_MESSAGE_LENGTH
+                );
         }
     } else {
         try {
-            const testCasesContent = fs.readFileSync('test_data.json', 'utf8');
-            const testCasesList = JSON.parse(testCasesContent);
-            for (const testCaseItem of testCasesList) {
-                allResults.push(runTestCase(testCaseItem, mainFunctionInstance));
+            const testCasesContent = fs.readFileSync(TEST_DATA_FILE, 'utf8');
+            const testCases = JSON.parse(testCasesContent);
+            for (const tc of testCases) {
+                allTestResults.push(await runSingleTestCase(tc, studentMainFunction));
             }
         } catch (e) {
-            let errorId = 'error_runtime_main';
-            let errorName = 'Main Runner Error';
-            if (e instanceof SyntaxError) {
-                errorId = 'error_json_decode';
-                errorName = 'Test Data Error';
-            } else if (e.code === 'ENOENT') {
-                errorId = 'error_no_tests';
-                errorName = 'Test Data Error';
+            overallErrorMessage = `Error in test runner: ${e.name}: ${e.message}\n${e.stack || ''}`.substring(
+                0,
+                MAX_ERROR_MESSAGE_LENGTH
+            );
+
+            if (allTestResults.length === 0) {
+                allTestResults.push({
+                    testCaseId: 'runner_error',
+                    testCaseName: 'Runner Execution Error',
+                    passed: false,
+                    errorMessage: overallErrorMessage,
+                    executionTimeMs: 0,
+                });
             }
-            allResults.push({
-                testCaseId: errorId,
-                testCaseName: errorName,
-                passed: false,
-                errorMessage: `Error in main runner: ${e.name}: ${e.message}`,
-            });
         }
     }
 
-    const finalOutputStructure = {
-        compile_error: compileErrorOutput,
-        stdout_keseluruhan: '',
-        stderr_keseluruhan: '',
-        test_results: allResults,
+    const finalOutput = {
+        compile_error: compileOrImportError,
+        runner_error: overallErrorMessage,
+        test_results: allTestResults,
     };
-    process.stdout.write(JSON.stringify(finalOutputStructure) + '\\n');
+
+    process.stdout.write(JSON.stringify(finalOutput) + '\n');
+}
+
+if (require.main === module) {
+    main().catch((criticalError) => {
+        const fatalErrorOutput = {
+            compile_error: compileOrImportError,
+            runner_error: `CRITICAL RUNNER FAILURE: ${criticalError.name}: ${criticalError.message}\n${
+                criticalError.stack || ''
+            }`.substring(0, MAX_ERROR_MESSAGE_LENGTH),
+            test_results: [],
+        };
+        process.stdout.write(JSON.stringify(fatalErrorOutput) + '\n');
+        process.exit(1);
+    });
 }
