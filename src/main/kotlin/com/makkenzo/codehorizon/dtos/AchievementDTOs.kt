@@ -58,8 +58,6 @@ data class AdminUpdateAchievementDTO(
 
     @field:Size(max = 1000, message = "Длина описания не должна превышать 1000 символов")
     val description: String? = null,
-
-    @field:URL(message = "Некорректный URL иконки")
     val iconUrl: String? = null,
 
     val triggerType: AchievementTriggerType? = null,

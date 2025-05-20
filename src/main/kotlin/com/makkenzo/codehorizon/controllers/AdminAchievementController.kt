@@ -24,7 +24,6 @@ import org.springframework.web.server.ResponseStatusException
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAuthority('achievement:admin:manage')")
 class AdminAchievementController(private val adminAchievementManagementService: AdminAchievementManagementService) {
-
     @PostMapping
     @Operation(summary = "Создать новое определение достижения")
     fun createAchievement(@Valid @RequestBody achievementDto: AdminCreateAchievementDTO): ResponseEntity<Achievement> {
