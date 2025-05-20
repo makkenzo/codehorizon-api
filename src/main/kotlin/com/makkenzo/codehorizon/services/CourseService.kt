@@ -13,6 +13,7 @@ import org.bson.Document
 import org.bson.types.ObjectId
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.cache.annotation.Caching
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
@@ -144,7 +145,12 @@ class CourseService(
         return categories.sorted()
     }
 
-    @CacheEvict(value = ["courses"], allEntries = true)
+    @Caching(
+        evict = [
+            CacheEvict(value = ["courses"], allEntries = true),
+            CacheEvict(value = ["distinctCategories"], allEntries = true)
+        ]
+    )
     @Transactional
     fun createCourseAdmin(request: AdminCreateUpdateCourseRequestDTO): AdminCourseDetailDTO {
         val creatorUser = authorizationService.getCurrentUserEntity()
@@ -669,7 +675,12 @@ class CourseService(
         return getCourseDetailsAdmin(savedCourse.id!!)
     }
 
-    @CacheEvict(value = ["courses"], key = "#courseId")
+    @Caching(
+        evict = [
+            CacheEvict(value = ["courses"], allEntries = true),
+            CacheEvict(value = ["distinctCategories"], allEntries = true)
+        ]
+    )
     fun deleteCourseAdminOrMentor(courseId: String) {
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Курс $courseId не найден")
@@ -692,7 +703,11 @@ class CourseService(
         courseRepository.save(course.copy(deletedAt = Instant.now()))
     }
 
-    @CacheEvict(value = ["courses"], key = "#courseId")
+    @Caching(
+        evict = [
+            CacheEvict(value = ["courses"], allEntries = true)
+        ]
+    )
     fun addLessonAdminOrMentor(
         courseId: String,
         lessonDto: AdminCreateUpdateLessonRequestDTO

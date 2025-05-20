@@ -40,7 +40,7 @@ class AdminAchievementManagementService(
     }
 
     @CacheEvict(
-        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        value = ["allAchievementsList", "allAchievementsPagedDTO", "allAchievementsPaged", "achievementCategories"],
         allEntries = true
     )
     @Transactional
@@ -78,7 +78,7 @@ class AdminAchievementManagementService(
 
     @Transactional
     @CacheEvict(
-        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        value = ["allAchievementsList", "allAchievementsPagedDTO", "allAchievementsPaged", "achievementCategories"],
         allEntries = true
     )
     fun updateAchievement(id: String, dto: AdminUpdateAchievementDTO): Achievement {
@@ -113,7 +113,7 @@ class AdminAchievementManagementService(
     }
 
     @CacheEvict(
-        value = ["allAchievementsDefinitions", "achievementCategories", "allAchievementsPaged"],
+        value = ["allAchievementsList", "allAchievementsPagedDTO", "allAchievementsPaged", "achievementCategories"],
         allEntries = true
     )
     @Transactional

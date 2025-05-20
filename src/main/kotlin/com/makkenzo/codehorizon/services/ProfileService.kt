@@ -13,6 +13,7 @@ import com.makkenzo.codehorizon.repositories.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
+import org.springframework.cache.annotation.Caching
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.HttpStatus
 import org.springframework.scheduling.annotation.Async
@@ -36,9 +37,12 @@ class ProfileService(
 
 
     @Transactional
-    @CacheEvict(
-        value = ["userAccountSettings", "profiles", "userProfiles"],
-        key = "@authorizationService.getCurrentUserEntity().id"
+    @Caching(
+        evict = [
+            CacheEvict(value = ["userAccountSettings"], key = "@authorizationService.getCurrentUserEntity().id"),
+            CacheEvict(value = ["profiles"], key = "@authorizationService.getCurrentUserEntity().id"),
+            CacheEvict(value = ["userProfiles"], key = "@authorizationService.getCurrentUserEntity().username")
+        ]
     )
     fun updateNotificationPreferences(dto: UpdateNotificationPreferencesRequestDTO): NotificationPreferences {
         val currentUser = authorizationService.getCurrentUserEntity()
@@ -124,7 +128,13 @@ class ProfileService(
     }
 
     @Transactional
-    @CacheEvict(value = ["profiles", "userProfiles", "userAccountSettings"], key = "#result.userId")
+    @Caching(
+        evict = [
+            CacheEvict(value = ["profiles"], key = "#result.userId"),
+            CacheEvict(value = ["userAccountSettings"], key = "#result.userId"),
+            CacheEvict(value = ["userProfiles"], key = "@authorizationService.getCurrentUserEntity().username")
+        ]
+    )
     fun updateProfile(updatedProfileDTO: UpdateProfileDTO): Profile {
         val currentUserId = authorizationService.getCurrentUserEntity().id!!
         val existingProfile = profileRepository.findByUserId(currentUserId)
@@ -240,7 +250,10 @@ class ProfileService(
     }
 
     @Transactional
-    @CacheEvict(value = ["profiles"], allEntries = true)
+    @CacheEvict(
+        value = ["profiles", "userProfiles", "userAccountSettings"],
+        allEntries = true
+    )
     fun deleteProfile() {
         val currentUserId = authorizationService.getCurrentUserEntity().id!!
         val profile = profileRepository.findByUserId(currentUserId)
