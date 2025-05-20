@@ -22,11 +22,18 @@ class GradingService(
     @Value("classpath:runners/python_default_runner.py")
     private val pythonRunnerResource: Resource,
     @Value("classpath:runners/javascript_default_runner.js")
-    private val javascriptRunnerResource: Resource
+    private val javascriptRunnerResource: Resource,
+    @Value("classpath:runners/run_java_tests.sh")
+    private val javaRunnerScriptResource: Resource,
+    @Value("classpath:runners/TestRunner.java")
+    private val javaTestRunnerCodeResource: Resource
 ) {
     private val logger = LoggerFactory.getLogger(GradingService::class.java)
+
     private val pythonRunnerScriptContent: String
     private val javascriptRunnerScriptContent: String
+    private val javaRunnerScriptContent: String
+    private val javaTestRunnerCodeContent: String
 
     companion object {
         private const val MAX_ERROR_MESSAGE_LENGTH = 2048
@@ -46,6 +53,18 @@ class GradingService(
         } catch (e: Exception) {
             logger.error("Не удалось загрузить скрипт javascript_default_runner.js: ${e.message}", e)
             throw IllegalStateException("Не удалось загрузить JavaScript runner скрипт", e)
+        }
+        javaRunnerScriptContent = try {
+            javaRunnerScriptResource.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            logger.error("Не удалось загрузить скрипт java_default_runner.sh: ${e.message}", e)
+            throw IllegalStateException("Не удалось загрузить Java runner shell скрипт", e)
+        }
+        javaTestRunnerCodeContent = try {
+            javaTestRunnerCodeResource.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            logger.error("Не удалось загрузить TestRunner.java: ${e.message}", e)
+            throw IllegalStateException("Не удалось загрузить Java TestRunner код", e)
         }
     }
 
@@ -81,21 +100,27 @@ class GradingService(
                         )
                     } else {
                         when (task.language) {
-                            ProgrammingLanguage.PYTHON -> {
-                                gradeCodeWithDocker(
-                                    currentSubmission,
-                                    task,
-                                    pythonRunnerScriptContent,
-                                    ProgrammingLanguage.PYTHON
-                                )
-                            }
+                            ProgrammingLanguage.PYTHON -> gradeCodeWithDocker(
+                                currentSubmission,
+                                task,
+                                pythonRunnerScriptContent,
+                                ProgrammingLanguage.PYTHON
+                            )
 
-                            ProgrammingLanguage.JAVASCRIPT -> {
+                            ProgrammingLanguage.JAVASCRIPT -> gradeCodeWithDocker(
+                                currentSubmission,
+                                task,
+                                javascriptRunnerScriptContent,
+                                ProgrammingLanguage.JAVASCRIPT
+                            )
+
+                            ProgrammingLanguage.JAVA -> {
                                 gradeCodeWithDocker(
-                                    currentSubmission,
-                                    task,
-                                    javascriptRunnerScriptContent,
-                                    ProgrammingLanguage.JAVASCRIPT
+                                    submission = currentSubmission,
+                                    task = task,
+                                    runnerScriptContent = javaRunnerScriptContent,
+                                    language = ProgrammingLanguage.JAVA,
+                                    additionalFilesToCopy = mapOf("TestRunner.java" to javaTestRunnerCodeContent)
                                 )
                             }
 
@@ -155,7 +180,8 @@ class GradingService(
         submission: Submission,
         task: Task,
         runnerScriptContent: String,
-        language: ProgrammingLanguage
+        language: ProgrammingLanguage,
+        additionalFilesToCopy: Map<String, String> = emptyMap()
     ): Submission {
         val studentCode = submission.answerCode ?: return submission.copy(
             status = SubmissionStatus.ERROR,
@@ -188,18 +214,22 @@ class GradingService(
         val dockerImageName = when (language) {
             ProgrammingLanguage.PYTHON -> "codehorizon-python-runner:latest"
             ProgrammingLanguage.JAVASCRIPT -> "codehorizon-javascript-runner:latest"
+            ProgrammingLanguage.JAVA -> "codehorizon-java-runner:latest"
         }
         val mainCodeFileName = when (language) {
             ProgrammingLanguage.PYTHON -> "student_code.py"
             ProgrammingLanguage.JAVASCRIPT -> "student_code.js"
+            ProgrammingLanguage.JAVA -> "StudentCode.java"
         }
         val runnerFileName = when (language) {
             ProgrammingLanguage.PYTHON -> "run_tests.py"
             ProgrammingLanguage.JAVASCRIPT -> "run_tests.js"
+            ProgrammingLanguage.JAVA -> "run_java_tests.sh"
         }
         val commandToRun = when (language) {
             ProgrammingLanguage.PYTHON -> listOf("python", runnerFileName)
             ProgrammingLanguage.JAVASCRIPT -> listOf("node", runnerFileName)
+            ProgrammingLanguage.JAVA -> listOf("/bin/sh", runnerFileName)
         }
 
         val dockerResult = dockerService.executeCodeInContainer(
@@ -210,8 +240,9 @@ class GradingService(
             testRunnerFileName = runnerFileName,
             testCasesJsonContent = testCasesJson,
             command = commandToRun,
-            timeoutSeconds = task.timeoutSeconds ?: 10L,
-            memoryLimitMb = task.memoryLimitMb ?: 128L
+            timeoutSeconds = task.timeoutSeconds ?: 20L,
+            memoryLimitMb = task.memoryLimitMb ?: 256L,
+            additionalFiles = additionalFilesToCopy
         )
 
         var overallStatus: SubmissionStatus

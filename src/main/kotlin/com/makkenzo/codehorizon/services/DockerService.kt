@@ -34,6 +34,7 @@ class DockerService {
 
     private val pythonImageName = "codehorizon-python-runner:latest"
     private val javascriptImageName = "codehorizon-javascript-runner:latest"
+    private val javaImageName = "codehorizon-java-runner:latest"
     private val baseTempDir = Paths.get(System.getProperty("java.io.tmpdir"), "codehorizon_runner")
 
     private val maxConcurrentContainers = 5
@@ -58,6 +59,7 @@ class DockerService {
 
         buildImageIfNotExists(pythonImageName, "docker/python-runner.Dockerfile")
         buildImageIfNotExists(javascriptImageName, "docker/javascript-runner.Dockerfile")
+        buildImageIfNotExists(javaImageName, "docker/java-runner.Dockerfile")
     }
 
     private fun ensureDockerAvailable() {
@@ -70,86 +72,120 @@ class DockerService {
         }
     }
 
-    private fun buildImageIfNotExists(imageName: String, dockerfileRelativePath: String) {
-        try {
-            logger.info("--- Checking/Building Docker image: $imageName ---")
-            val existingImage = dockerClient.listImagesCmd().withImageNameFilter(imageName).exec()
 
-            if (existingImage.isNotEmpty()) {
-                logger.info("Docker image $imageName found locally (ID: ${existingImage.first().id.take(12)}). Skipping build.")
-                logger.info("--- Docker image check for $imageName complete ---")
+    private fun buildImageIfNotExists(imageNameWithTag: String, dockerfileRelativePath: String) {
+        try {
+            logger.info("--- Checking/Building Docker image: $imageNameWithTag ---")
+
+            // Получаем ВСЕ локальные образы. Фильтр по имени в docker-java может быть ненадежен для name:tag.
+            val allLocalImages: List<Image> = dockerClient.listImagesCmd().withShowAll(true).exec()
+
+            // Ищем образ с точным совпадением имени и тега
+            val imageActuallyExists = allLocalImages.any { img ->
+                img.repoTags?.any { tag -> tag == imageNameWithTag } ?: false
+            }
+
+            if (imageActuallyExists) {
+                logger.info("Docker image $imageNameWithTag found locally with the correct tag. Skipping build.")
+                val foundImageDetails = allLocalImages.firstOrNull { img ->
+                    img.repoTags?.any { tag -> tag == imageNameWithTag } ?: false
+                }
+                if (foundImageDetails != null) {
+                    logger.info(
+                        "  Found Image Details: ID='{}', Tags='{}', Created='{}', Size='{}'",
+                        foundImageDetails.id,
+                        foundImageDetails.repoTags?.joinToString(", ") ?: "N/A",
+                        foundImageDetails.created,
+                        foundImageDetails.size
+                    )
+                }
+                logger.info("--- Docker image check for $imageNameWithTag complete ---")
                 return
             }
 
-            logger.info("Docker image $imageName NOT FOUND locally. Starting build...")
-
+            logger.info("Docker image $imageNameWithTag NOT FOUND locally with the correct tag. Starting build...")
             val dockerfile = File(dockerfileRelativePath)
             val dockerContextPath = dockerfile.parentFile ?: File(".")
 
             if (!dockerfile.exists()) {
                 logger.error("Dockerfile not found at path: ${dockerfile.absolutePath}")
-                throw IllegalStateException("Dockerfile not found for $imageName at ${dockerfile.absolutePath}")
+                throw IllegalStateException("Dockerfile not found for $imageNameWithTag at ${dockerfile.absolutePath}")
             }
             logger.info("Using Dockerfile: ${dockerfile.absolutePath}, Context: ${dockerContextPath.absolutePath}")
-
 
             val buildCallbackLog = object : BuildImageResultCallback() {
                 override fun onNext(item: BuildResponseItem?) {
                     item?.stream?.trim()
-                        ?.let { logMsg -> if (logMsg.isNotEmpty()) logger.info("Build log ($imageName): $logMsg") }
+                        ?.let { logMsg -> if (logMsg.isNotEmpty()) logger.info("Build log ($imageNameWithTag): $logMsg") }
                     item?.progressDetail?.let { progress ->
-                        logger.debug("Build progress ($imageName): current=${progress.current}, total=${progress.total}")
+                        logger.debug("Build progress ($imageNameWithTag): current=${progress.current}, total=${progress.total}")
                     }
                     item?.errorDetail?.let { error ->
-                        logger.error("Build error detail ($imageName): ${error.code} - ${error.message}")
+                        logger.error("Build error detail ($imageNameWithTag): ${error.code} - ${error.message}")
                     }
                     super.onNext(item)
                 }
 
                 override fun onError(throwable: Throwable?) {
-                    logger.error("Build process error ($imageName): ", throwable)
+                    logger.error("Build process error ($imageNameWithTag): ", throwable)
                     super.onError(throwable)
                 }
 
                 override fun onComplete() {
-                    logger.info("BuildImageResultCallback onComplete triggered for $imageName.")
+                    logger.info("BuildImageResultCallback onComplete triggered for $imageNameWithTag.")
                     super.onComplete()
                 }
             }
 
             try {
                 dockerClient.buildImageCmd(dockerfile)
-                    .withTags(setOf(imageName))
-                    // .withDockerfile(dockerfile) // Dockerfile уже указан в buildImageCmd(File)
+                    .withTags(setOf(imageNameWithTag)) // Указываем тег здесь
                     .withPull(true)
                     .exec(buildCallbackLog)
-                    .awaitCompletion(5, TimeUnit.MINUTES)
+                    .awaitCompletion(5, TimeUnit.MINUTES) // Таймаут на сборку
             } catch (e: Exception) {
-                logger.error("Exception during buildImageCmd execution for $imageName: ${e.message}", e)
-                throw IllegalStateException("Failed to build Docker image $imageName due to: ${e.message}", e)
+                logger.error("Exception during buildImageCmd execution for $imageNameWithTag: ${e.message}", e)
+                throw IllegalStateException("Failed to build Docker image $imageNameWithTag due to: ${e.message}", e)
             }
 
-            val imagesAfterBuild = dockerClient.listImagesCmd().withImageNameFilter(imageName).exec()
-            if (imagesAfterBuild.isEmpty()) {
-                logger.error("!!! Docker image $imageName did NOT appear after build attempt !!! Check build logs above.")
-                throw IllegalStateException("Docker image $imageName could not be built or found after build attempt.")
-            } else {
-                logger.info(
-                    "Docker image $imageName successfully built/verified (ID: ${
-                        imagesAfterBuild.first().id.take(
-                            12
+            // Повторная проверка после сборки
+            val imagesAfterBuild = dockerClient.listImagesCmd().withShowAll(true).exec()
+            val builtImageExists = imagesAfterBuild.any { img ->
+                img.repoTags?.any { tag -> tag == imageNameWithTag } ?: false
+            }
+
+            if (!builtImageExists) {
+                logger.error("!!! Docker image $imageNameWithTag did NOT appear after build attempt with the correct tag!!! Check build logs above.")
+                // Дополнительное логирование: какие теги были у образов после сборки, если имя совпадает, но тег другой?
+                imagesAfterBuild.filter {
+                    it.repoTags?.any { rt -> rt.startsWith(imageNameWithTag.substringBeforeLast(":")) } ?: false
+                }
+                    .forEach { img ->
+                        logger.info(
+                            "   Possible related image found after build: ID='{}', Tags='{}'",
+                            img.id,
+                            img.repoTags?.joinToString(", ")
                         )
-                    })."
+                    }
+
+                throw IllegalStateException("Docker image $imageNameWithTag could not be built or found after build attempt with the correct tag.")
+            } else {
+                val newImageDetails =
+                    imagesAfterBuild.first { img -> img.repoTags?.any { tag -> tag == imageNameWithTag } ?: false }
+                logger.info(
+                    "Docker image $imageNameWithTag successfully built/verified (ID: {}).",
+                    newImageDetails.id.take(12)
                 )
             }
 
-            logger.info("--- Docker image build for $imageName complete ---")
+            logger.info("--- Docker image build for $imageNameWithTag complete ---")
+
         } catch (e: DockerClientException) {
-            logger.error("Docker client error during image build/check for $imageName: ${e.message}", e)
-            throw IllegalStateException("Docker client error for $imageName: ${e.message}", e)
+            logger.error("Docker client error during image build/check for $imageNameWithTag: ${e.message}", e)
+            throw IllegalStateException("Docker client error for $imageNameWithTag: ${e.message}", e)
         } catch (e: Exception) {
-            logger.error("Critical error during Docker image build/check for $imageName: ${e.message}", e)
-            throw IllegalStateException("Failed to ensure Docker image $imageName is available", e)
+            logger.error("Critical error during Docker image build/check for $imageNameWithTag: ${e.message}", e)
+            throw IllegalStateException("Failed to ensure Docker image $imageNameWithTag is available", e)
         }
     }
 
@@ -163,7 +199,8 @@ class DockerService {
         command: List<String>,
         timeoutSeconds: Long = 10,
         memoryLimitMb: Long = 128,
-        cpuQuotaMicroseconds: Long = 50000
+        cpuQuotaMicroseconds: Long = 50000,
+        additionalFiles: Map<String, String> = emptyMap()
     ): DockerExecutionResult {
         var permitAcquired = false
         val runId = UUID.randomUUID().toString()
@@ -202,6 +239,15 @@ class DockerService {
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
                 )
+
+                additionalFiles.forEach { (fileName, content) ->
+                    Files.writeString(
+                        tempRunDir.resolve(fileName),
+                        content,
+                        StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
+                    )
+                }
 
                 val hostConfig = HostConfig.newHostConfig()
                     .withMemory(memoryLimitMb * 1024 * 1024)
