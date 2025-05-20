@@ -219,4 +219,28 @@ class AuthController(
 
         return ResponseEntity.ok(newUser)
     }
+
+    @PostMapping("/resend-verification")
+    @Operation(
+        summary = "Повторная отправка письма для подтверждения email",
+        security = [SecurityRequirement(name = "bearerAuth")]
+    )
+    @PreAuthorize("isAuthenticated()")
+    @RateLimited(limit = 3, durationSeconds = 3600, strategy = KeyStrategy.USER_ID, keyPrefix = "rl_resend_verify_")
+    fun resendVerificationEmail(): ResponseEntity<MessageResponseDTO> {
+        val currentUser = authorizationService.getCurrentUserEntity()
+
+        if (currentUser.isVerified) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(MessageResponseDTO("Ваш email уже подтвержден."))
+        }
+
+        return try {
+            emailService.sendVerificationEmail(currentUser, MailActionEnum.REGISTRATION)
+            ResponseEntity.ok(MessageResponseDTO("Письмо для подтверждения отправлено на ваш email."))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(MessageResponseDTO("Не удалось отправить письмо. Попробуйте позже."))
+        }
+    }
 }

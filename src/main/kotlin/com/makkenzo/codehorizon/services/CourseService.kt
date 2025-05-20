@@ -561,7 +561,13 @@ class CourseService(
 
     @Transactional
     fun enrollFreeCourse(courseId: String): CourseProgress {
-        val currentUserId = authorizationService.getCurrentUserEntity().id!!
+        val currentUser = authorizationService.getCurrentUserEntity()
+        val currentUserId = currentUser.id!!
+
+        if (!currentUser.isVerified) {
+            throw AccessDeniedException("Пожалуйста, подтвердите ваш email, чтобы записаться на курс.")
+        }
+
         val course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
             ?: throw NotFoundException("Курс с ID $courseId не найден")
 

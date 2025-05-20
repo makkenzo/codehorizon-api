@@ -3,10 +3,14 @@ package com.makkenzo.codehorizon.services
 import com.stripe.Stripe
 import com.stripe.model.checkout.Session
 import com.stripe.param.checkout.SessionCreateParams
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 
 @Service
-class PaymentService(private val courseService: CourseService) {
+class PaymentService(
+    private val courseService: CourseService,
+    private val authorizationService: AuthorizationService
+) {
     private val stripeSecretKey =
         System.getenv("STRIPE_SECRET_KEY") ?: throw RuntimeException("Missing STRIPE_SECRET_KEY")
     private val frontDomainUrl =
@@ -15,6 +19,15 @@ class PaymentService(private val courseService: CourseService) {
     fun createCheckoutSession(courseId: String, userId: String, coupon: String?): String {
         Stripe.apiKey = stripeSecretKey
 
+        val currentUser = authorizationService.getCurrentUserEntity()
+        if (currentUser.id != userId) {
+            throw AccessDeniedException("ID пользователя в запросе не совпадает с аутентифицированным пользователем.")
+        }
+
+        if (!currentUser.isVerified) {
+            throw AccessDeniedException("Пожалуйста, подтвердите ваш email перед совершением покупки.")
+        }
+        
         val course = courseService.getCourseById(courseId)
 
         if (course.isFree) {

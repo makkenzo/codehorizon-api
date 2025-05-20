@@ -41,6 +41,10 @@ class ReviewService(
         val currentUser = authorizationService.getCurrentUserEntity()
         val authorId = currentUser.id!!
 
+        if (!currentUser.isVerified) {
+            throw AccessDeniedException("Пожалуйста, подтвердите ваш email, чтобы оставить отзыв.")
+        }
+
         if (!courseProgressRepository.existsByUserIdAndCourseId(authorId, courseId)) {
             throw AccessDeniedException("У вас нет доступа для оставления отзыва на этот курс (вы не записаны).")
         }
@@ -98,6 +102,12 @@ class ReviewService(
     fun updateReview(reviewId: String, dto: UpdateReviewRequestDTO): ReviewDTO {
         val review = reviewRepository.findById(reviewId)
             .orElseThrow { NotFoundException("Отзыв с ID $reviewId не найден") }
+
+        val currentUser = authorizationService.getCurrentUserEntity()
+
+        if (!currentUser.isVerified) {
+            throw AccessDeniedException("Пожалуйста, подтвердите ваш email, чтобы редактировать отзыв.")
+        }
 
         if (!authorizationService.canEditOwnReview(review.authorId)) {
             throw AccessDeniedException("Вы не можете редактировать этот отзыв.")

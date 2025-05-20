@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -37,6 +38,23 @@ class MentorshipApplicationService(
     fun applyForMentorship(requestDTO: MentorshipApplicationRequestDTO): MentorshipApplicationDTO {
         val currentUser = authorizationService.getCurrentUserEntity()
         val userId = currentUser.id!!
+
+        if (!currentUser.isVerified) {
+            throw AccessDeniedException("Пожалуйста, подтвердите ваш email, чтобы подать заявку на менторство.")
+        }
+
+        if (hasActiveApplication(userId)) {
+            throw IllegalStateException("У вас уже есть активная заявка на рассмотрении.")
+        }
+
+        if (currentUser.roles.any {
+                it.equals("ROLE_MENTOR", ignoreCase = true) || it.equals(
+                    "MENTOR",
+                    ignoreCase = true
+                )
+            }) {
+            throw IllegalStateException("Вы уже являетесь ментором.")
+        }
 
         val application = MentorshipApplication(
             userId = userId,
