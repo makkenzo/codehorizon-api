@@ -138,11 +138,14 @@ class DockerService {
             }
 
             try {
-                dockerClient.buildImageCmd(dockerfile)
-                    .withTags(setOf(imageNameWithTag)) // Указываем тег здесь
+                val projectRootContext = File(".")
+                dockerClient.buildImageCmd()
+                    .withBaseDirectory(projectRootContext)
+                    .withDockerfile(dockerfile)
+                    .withTags(setOf(imageNameWithTag))
                     .withPull(true)
                     .exec(buildCallbackLog)
-                    .awaitCompletion(5, TimeUnit.MINUTES) // Таймаут на сборку
+                    .awaitCompletion(5, TimeUnit.MINUTES)
             } catch (e: Exception) {
                 logger.error("Exception during buildImageCmd execution for $imageNameWithTag: ${e.message}", e)
                 throw IllegalStateException("Failed to build Docker image $imageNameWithTag due to: ${e.message}", e)
