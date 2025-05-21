@@ -222,8 +222,8 @@ class GradingService(
             ProgrammingLanguage.JAVA -> "StudentCode.java"
         }
         val runnerFileName = when (language) {
-            ProgrammingLanguage.PYTHON -> "run_tests.py"
-            ProgrammingLanguage.JAVASCRIPT -> "run_tests.js"
+            ProgrammingLanguage.PYTHON -> "python_default_runner.py"
+            ProgrammingLanguage.JAVASCRIPT -> "javascript_default_runner.js"
             ProgrammingLanguage.JAVA -> "run_java_tests.sh"
         }
         val commandToRun = when (language) {
