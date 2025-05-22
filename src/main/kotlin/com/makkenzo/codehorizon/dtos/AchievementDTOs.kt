@@ -25,13 +25,12 @@ data class AdminCreateAchievementDTO(
     @field:URL(message = "Некорректный URL иконки")
     val iconUrl: String,
 
-    val triggerType: AchievementTriggerType,
+    @field:NotBlank(message = "Ключ типа триггера не может быть пустым")
+    val triggerTypeKey: String,
 
-    @field:Min(value = 0, message = "Порог срабатывания не может быть отрицательным")
-    val triggerThreshold: Int,
-
-    @field:Size(max = 255, message = "Длина значения порога не должна превышать 255 символов")
-    val triggerThresholdValue: String? = null,
+    // Consider adding @NotEmpty if parameters are always expected for all trigger types
+    // For now, allowing empty map if a trigger genuinely needs no parameters.
+    val triggerParameters: Map<String, Any> = emptyMap(),
 
     @field:PositiveOrZero(message = "XP бонус не может быть отрицательным")
     val xpBonus: Long = 0L,
@@ -60,13 +59,8 @@ data class AdminUpdateAchievementDTO(
     val description: String? = null,
     val iconUrl: String? = null,
 
-    val triggerType: AchievementTriggerType? = null,
-
-    @field:Min(value = 0, message = "Порог срабатывания не может быть отрицательным")
-    val triggerThreshold: Int? = null,
-
-    @field:Size(max = 255, message = "Длина значения порога не должна превышать 255 символов")
-    val triggerThresholdValue: String? = null,
+    val triggerTypeKey: String? = null,
+    val triggerParameters: Map<String, Any>? = null,
 
     @field:PositiveOrZero(message = "XP бонус не может быть отрицательным")
     val xpBonus: Long? = null,

@@ -13,29 +13,6 @@ enum class AchievementRarity {
     LEGENDARY
 }
 
-enum class AchievementTriggerType {
-    COURSE_COMPLETION_COUNT,
-    LESSON_COMPLETION_COUNT_TOTAL,
-    LESSON_COMPLETION_STREAK_DAILY,
-    REVIEW_COUNT,
-    FIRST_COURSE_COMPLETED,
-    FIRST_REVIEW_WRITTEN,
-    PROFILE_COMPLETION_PERCENT,
-    DAILY_LOGIN_STREAK,
-    COURSE_CREATION_COUNT,
-    TOTAL_XP_EARNED,
-    LEVEL_REACHED,
-    SPECIFIC_COURSE_COMPLETED,
-    SPECIFIC_LESSON_COMPLETED,
-    CATEGORY_COURSES_COMPLETED,
-    WISHLIST_ITEM_COUNT,
-    MENTOR_STUDENT_COURSE_COMPLETION,
-    MENTOR_TOTAL_STUDENT_COMPLETIONS,
-    CUSTOM_FRONTEND_EVENT,
-    LESSON_COMPLETED_AT_NIGHT,
-    FIRST_COURSE_COMPLETED_WITHIN_TIMEFRAME
-}
-
 @Document(collection = "achievements")
 data class Achievement(
     @Id val id: String? = null,
@@ -47,9 +24,9 @@ data class Achievement(
     val description: String,
     val iconUrl: String,
 
-    val triggerType: AchievementTriggerType,
-    val triggerThreshold: Int,
-    val triggerThresholdValue: String? = null,
+    @Indexed
+    val triggerTypeKey: String,
+    val triggerParameters: Map<String, Any>,
 
     val xpBonus: Long = 0L,
     val rarity: AchievementRarity = AchievementRarity.COMMON,
