@@ -13,7 +13,7 @@
 
 [https://codehorizon-api.makkenzo.com/swagger-ui/index.html](https://codehorizon-api.makkenzo.com/swagger-ui/index.html)
 
-  
+
   
 <h2>🧐 Features</h2>
 
